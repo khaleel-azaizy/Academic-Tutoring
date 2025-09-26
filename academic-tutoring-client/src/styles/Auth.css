@@ -1,0 +1,246 @@
+/* Authentication Form Styles - Optimized for PC */
+.auth-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 40px;
+  width: 100vw;
+}
+
+.auth-card {
+  background: white;
+  border-radius: 20px;
+  padding: 50px 60px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+  width: 100%;
+  max-width: 600px;
+  min-height: 650px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.auth-header {
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.auth-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 15px;
+}
+
+.auth-subtitle {
+  color: #666;
+  font-size: 1.2rem;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  gap: 10px;
+}
+
+.form-label {
+  font-weight: 600;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.form-input {
+  padding: 18px 20px;
+  border: 2px solid #e1e8ed;
+  border-radius: 12px;
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+  direction: ltr;
+  min-height: 25px;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-select {
+  padding: 18px 20px;
+  border: 2px solid #e1e8ed;
+  border-radius: 12px;
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+  direction: ltr;
+  background: white;
+  min-height: 25px;
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.role-selection {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin: 15px 0;
+}
+
+.role-option {
+  padding: 20px 15px;
+  border: 2px solid #e1e8ed;
+  border-radius: 12px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 600;
+  text-align: center;
+  font-size: 1.1rem;
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.role-option:hover {
+  border-color: #667eea;
+  background-color: #f8f9ff;
+}
+
+.role-option.selected {
+  border-color: #667eea;
+  background-color: #667eea;
+  color: white;
+}
+
+.auth-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 20px 30px;
+  border-radius: 12px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 20px;
+  min-height: 60px;
+}
+
+.auth-button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
+}
+
+.auth-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.auth-link {
+  margin-top: 30px;
+  color: #666;
+  text-align: center;
+  font-size: 1.1rem;
+}
+
+.auth-link a {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.auth-link a:hover {
+  text-decoration: underline;
+}
+
+.error-message {
+  background-color: #fee;
+  color: #c33;
+  padding: 15px 20px;
+  border-radius: 10px;
+  font-size: 1rem;
+  text-align: center;
+  border: 1px solid #fcc;
+  margin-bottom: 20px;
+}
+
+.success-message {
+  background-color: #efe;
+  color: #373;
+  padding: 15px 20px;
+  border-radius: 10px;
+  font-size: 1rem;
+  text-align: center;
+  border: 1px solid #cfc;
+  margin-bottom: 20px;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s ease-in-out infinite;
+  margin-left: 10px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* PC-Optimized Responsive Design */
+@media (max-width: 1200px) {
+  .auth-card {
+    max-width: 500px;
+    padding: 40px 50px;
+  }
+  
+  .auth-title {
+    font-size: 2.2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .auth-container {
+    padding: 20px;
+  }
+  
+  .auth-card {
+    padding: 30px 25px;
+    max-width: 450px;
+    min-height: auto;
+  }
+  
+  .auth-title {
+    font-size: 1.8rem;
+  }
+  
+  .role-selection {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .role-option {
+    min-height: 60px;
+    font-size: 1rem;
+  }
+}
