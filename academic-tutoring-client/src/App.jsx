@@ -12,7 +12,7 @@ function App() {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+        <Route path="/register" element={<Register />} />
           
           {/* Protected Routes */}
           <Route 
@@ -28,7 +28,7 @@ function App() {
           <Route 
             path="/employee-dashboard" 
             element={
-              <ProtectedRoute allowedRoles={['עובד']}>
+              <ProtectedRoute allowedRoles={['Teacher']}>
                 <Dashboard />
               </ProtectedRoute>
             } 
@@ -37,7 +37,7 @@ function App() {
           <Route 
             path="/parent-dashboard" 
             element={
-              <ProtectedRoute allowedRoles={['הורה']}>
+              <ProtectedRoute allowedRoles={['Parent']}>
                 <Dashboard />
               </ProtectedRoute>
             } 
@@ -46,7 +46,7 @@ function App() {
           <Route 
             path="/student-dashboard" 
             element={
-              <ProtectedRoute allowedRoles={['תלמיד']}>
+              <ProtectedRoute allowedRoles={['Student']}>
                 <Dashboard />
               </ProtectedRoute>
             } 

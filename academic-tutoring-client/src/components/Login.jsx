@@ -142,11 +142,7 @@ const Login = () => {
           <Link to="/register">Sign up here</Link>
         </div>
 
-        <div className="auth-link" style={{ marginTop: '15px' }}>
-          <Link to="/forgot-password" style={{ fontSize: '0.9rem' }}>
-            Forgot your password?
-          </Link>
-        </div>
+        
       </div>
     </div>
   );

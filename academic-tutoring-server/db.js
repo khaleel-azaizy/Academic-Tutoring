@@ -1,10 +1,12 @@
 const { MongoClient } = require('mongodb')
+require('dotenv').config()
 
 let dbConnection
 
 module.exports = {
   connectToDb: (cb) => {
-    MongoClient.connect('mongodb://localhost:27017/AcademicTutoring')
+    const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/AcademicTutoring'
+    MongoClient.connect(uri)
       .then(client => {
         dbConnection = client.db()
         return cb()
