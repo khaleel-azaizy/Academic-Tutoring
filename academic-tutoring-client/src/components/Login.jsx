@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { authAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import '../styles/Auth.css';
@@ -12,6 +13,7 @@ const Login = () => {
     password: ''
   });
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -85,16 +87,19 @@ const Login = () => {
 
   return (
     <div className="auth-container">
-      <div className="auth-card">
+      <div className="auth-card login-card">
         <div className="auth-header">
           <h1 className="auth-title">Login</h1>
           <p className="auth-subtitle">Welcome back to our platform</p>
         </div>
 
 
-        <form onSubmit={handleSubmit} className="auth-form">
+        <form onSubmit={handleSubmit} className="auth-form login-form">
           <div className="form-group">
-            <label className="form-label">Email</label>
+            <label className="form-label">
+              <Mail className="icon" size={16} />
+              Email
+            </label>
             <input
               type="email"
               name="email"
@@ -107,21 +112,34 @@ const Login = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Password</label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleInputChange}
-              className="form-input"
-              placeholder="Enter your password"
-              required
-            />
+            <label className="form-label">
+              <Lock className="icon" size={16} />
+              Password
+            </label>
+            <div className="password-input-container">
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                value={formData.password}
+                onChange={handleInputChange}
+                className="form-input password-input"
+                placeholder="Enter your password"
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword(!showPassword)}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <button
             type="submit"
-            className="auth-button"
+            className="auth-button login-button"
             disabled={loading}
           >
             {loading ? (

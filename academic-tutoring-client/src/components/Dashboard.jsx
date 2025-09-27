@@ -472,7 +472,7 @@ const Dashboard = () => {
                               <div className="lesson-time">
                                 <Calendar className="icon" />
                                 {new Date(l.dateTime).toLocaleString()}
-                              </div>
+                            </div>
                               <div className="lesson-duration">
                                 <Clock className="icon" />
                                 {l.durationMinutes || 60} min
@@ -491,18 +491,42 @@ const Dashboard = () => {
                               )}
                             </div>
                             <div className="lesson-actions">
-                              <button className="auth-button btn-sm" onClick={() => handleAction(async () => { await roleAPI.clockIn(l._id); showSuccess('Clocked in'); })}>
-                                <Clock className="icon" /> Clock-in
-                              </button>
-                              <button className="auth-button btn-sm" onClick={() => handleAction(async () => { await roleAPI.clockOut(l._id); showSuccess('Clocked out'); })}>
-                                <Clock className="icon" /> Clock-out
-                              </button>
-                              <button className="auth-button btn-sm success" onClick={() => {
-                                setCompleteLessonState({ lessonId: l._id, workedMinutes: l.durationMinutes || 60 });
-                                setOpenModal('complete');
-                              }}>
-                                <CheckCircle className="icon" /> Complete
-                              </button>
+                              {l.status === 'booked' && !l.clockInAt && (
+                                <button className="auth-button btn-sm" onClick={() => handleAction(async () => { 
+                                  await roleAPI.clockIn(l._id); 
+                                  showSuccess('Clocked in'); 
+                                  // Refresh schedule
+                                  const data = await roleAPI.getTeacherSchedule();
+                                  setTeacherLessons(data.lessons || []);
+                                })}>
+                                  <Clock className="icon" /> Clock-in
+                                </button>
+                              )}
+                              {l.status === 'in_progress' && l.clockInAt && !l.clockOutAt && (
+                                <button className="auth-button btn-sm" onClick={() => handleAction(async () => { 
+                                  await roleAPI.clockOut(l._id); 
+                                  showSuccess('Clocked out'); 
+                                  // Refresh schedule
+                                  const data = await roleAPI.getTeacherSchedule();
+                                  setTeacherLessons(data.lessons || []);
+                                })}>
+                                  <Clock className="icon" /> Clock-out
+                                </button>
+                              )}
+                              {l.status === 'completed' && (
+                                <div className="lesson-completed">
+                                  <CheckCircle className="icon" />
+                                  <span>Completed</span>
+                                </div>
+                              )}
+                              {l.status === 'booked' && !l.clockInAt && (
+                                <button className="auth-button btn-sm success" onClick={() => {
+                                  setCompleteLessonState({ lessonId: l._id, workedMinutes: l.durationMinutes || 60 });
+                                  setOpenModal('complete');
+                                }}>
+                                  <CheckCircle className="icon" /> Complete
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -525,22 +549,22 @@ const Dashboard = () => {
                         <Clock className="icon" />
                         Time Range
                       </h4>
-                      <div className="grid-two">
-                        <div className="form-group">
+                    <div className="grid-two">
+                      <div className="form-group">
                           <label className="form-label">
                             <Calendar className="icon" />
                             From
                           </label>
-                          <input type="date" className="form-input" value={timeRange.from} onChange={(e) => setTimeRange({ ...timeRange, from: e.target.value })} />
-                        </div>
-                        <div className="form-group">
+                        <input type="date" className="form-input" value={timeRange.from} onChange={(e) => setTimeRange({ ...timeRange, from: e.target.value })} />
+                      </div>
+                      <div className="form-group">
                           <label className="form-label">
                             <Calendar className="icon" />
                             To
                           </label>
-                          <input type="date" className="form-input" value={timeRange.to} onChange={(e) => setTimeRange({ ...timeRange, to: e.target.value })} />
-                        </div>
+                        <input type="date" className="form-input" value={timeRange.to} onChange={(e) => setTimeRange({ ...timeRange, to: e.target.value })} />
                       </div>
+                    </div>
                     </div>
 
                     <div className="section">
@@ -623,9 +647,9 @@ const Dashboard = () => {
                           Current Constraints
                         </h4>
                         <div className="constraints-list">
-                          {constraints.map((constraint) => {
-                            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                            return (
+                        {constraints.map((constraint) => {
+                          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                          return (
                               <div key={constraint._id} className="constraint-card">
                                 <div className="constraint-header">
                                   <div className="constraint-day">
@@ -633,30 +657,30 @@ const Dashboard = () => {
                                     {dayNames[constraint.dayOfWeek]}
                                   </div>
                                   <div className="constraint-actions">
-                                    <button className="auth-button btn-sm" onClick={() => {
-                                      setEditingConstraint(constraint);
-                                      setConstraintForm({
-                                        dayOfWeek: constraint.dayOfWeek,
-                                        startTime: constraint.startTime,
-                                        endTime: constraint.endTime,
-                                        note: constraint.note || ''
-                                      });
-                                      setOpenModal('constraint');
+                                  <button className="auth-button btn-sm" onClick={() => {
+                                    setEditingConstraint(constraint);
+                                    setConstraintForm({
+                                      dayOfWeek: constraint.dayOfWeek,
+                                      startTime: constraint.startTime,
+                                      endTime: constraint.endTime,
+                                      note: constraint.note || ''
+                                    });
+                                    setOpenModal('constraint');
                                     }}>
                                       <Edit3 className="icon" />
                                       Edit
                                     </button>
                                     <button className="auth-button btn-sm danger" onClick={() => handleAction(async () => {
-                                      await roleAPI.deleteTimeConstraint(constraint._id);
-                                      const data = await roleAPI.getTimeConstraints();
-                                      setConstraints(data.constraints || []);
+                                    await roleAPI.deleteTimeConstraint(constraint._id);
+                                    const data = await roleAPI.getTimeConstraints();
+                                    setConstraints(data.constraints || []);
                                       showSuccess('Constraint deleted');
                                     })}>
                                       <Trash2 className="icon" />
                                       Delete
                                     </button>
-                                  </div>
                                 </div>
+                              </div>
                                 <div className="constraint-details">
                                   <div className="constraint-time">
                                     <Clock className="icon" />
@@ -668,10 +692,10 @@ const Dashboard = () => {
                                       {constraint.note}
                                     </div>
                                   )}
-                                </div>
                               </div>
-                            );
-                          })}
+                            </div>
+                          );
+                        })}
                         </div>
                       </div>
                     ) : (

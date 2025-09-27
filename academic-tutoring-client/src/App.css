@@ -123,9 +123,13 @@
   background: var(--bg-card);
   border: 1px solid var(--border-primary);
   border-radius: 12px;
-  padding: 20px;
+  padding: 24px;
   box-shadow: 0 2px 8px var(--shadow-light);
   transition: all 0.3s ease;
+  min-height: 240px;
+  height: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .lesson-card:hover {
@@ -136,8 +140,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--border-primary);
 }
 
@@ -147,6 +151,7 @@
   gap: 8px;
   font-weight: 600;
   color: var(--text-primary);
+  font-size: 14px;
 }
 
 .lesson-duration {
@@ -155,21 +160,24 @@
   gap: 8px;
   color: var(--text-secondary);
   font-size: 14px;
+  font-weight: 500;
 }
 
 .lesson-details {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   margin-bottom: 16px;
+  flex: 1;
 }
 
 .lesson-subject {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
+  font-size: 16px;
 }
 
 .lesson-student {
@@ -178,12 +186,32 @@
   gap: 8px;
   color: var(--text-secondary);
   font-size: 14px;
+  font-weight: 500;
 }
 
 .lesson-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   flex-wrap: wrap;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-primary);
+  min-height: 80px;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.lesson-completed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-success);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 12px 16px;
+  background: rgba(76, 175, 80, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(76, 175, 80, 0.3);
 }
 
 /* Hours entries */
@@ -1357,7 +1385,8 @@
   padding: 20px;
   padding-top: 100px; /* Account for fixed header */
   min-height: 100vh;
-  background-color: var(--bg-hover);
+  background-color: var(--bg-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 
@@ -1950,7 +1979,8 @@ body {
   padding: 40px;
   padding-top: 100px; /* Account for fixed header */
   min-height: 100vh;
-  background-color: var(--bg-hover);
+  background-color: var(--bg-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Student-specific styles */
@@ -2035,7 +2065,8 @@ body {
   background: var(--gradient-card);
 }
 
-.lesson-header {
+/* Student calendar lesson header */
+.student-calendar .lesson-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -2094,7 +2125,8 @@ body {
   transition: all 0.2s ease;
 }
 
-.lesson-details {
+/* Student calendar lesson details */
+.student-calendar .lesson-details {
   margin-bottom: 1rem;
 }
 
@@ -2157,16 +2189,16 @@ body {
 
 /* Responsive Design for Lessons */
 @media (max-width: 768px) {
-  .lesson-header {
+  .student-calendar .lesson-header {
     flex-direction: column;
     gap: 0.5rem;
   }
   
-  .lesson-duration {
+  .student-calendar .lesson-duration {
     align-self: flex-start;
   }
   
-  .lesson-details {
+  .student-calendar .lesson-details {
     font-size: 13px;
   }
   
@@ -2586,10 +2618,19 @@ body {
   box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
 }
 
+.auth-button.primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
 .auth-button.large {
-  padding: 16px 32px;
-  font-size: 16px;
-  border-radius: 12px;
+  padding: 14px 28px;
+  font-size: 15px;
+  border-radius: 10px;
+  min-height: 48px;
+  font-weight: 600;
 }
 
 /* Pulse Animation */
@@ -3183,21 +3224,25 @@ body {
   overflow-y: auto;
 }
 
-.lesson-card {
+.lesson-cards .lesson-card {
   padding: 20px;
   border-bottom: 1px solid var(--border-primary);
   transition: all 0.2s ease;
+  border-radius: 0;
+  box-shadow: none;
+  margin-bottom: 0;
 }
 
-.lesson-card:hover {
+.lesson-cards .lesson-card:hover {
   background: var(--bg-hover);
 }
 
-.lesson-card:last-child {
+.lesson-cards .lesson-card:last-child {
   border-bottom: none;
 }
 
-.lesson-header {
+/* List view lesson header */
+.lesson-list .lesson-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -3211,7 +3256,8 @@ body {
 }
 
 
-.lesson-details {
+/* List view lesson details */
+.lesson-list .lesson-details {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -3384,8 +3430,8 @@ body {
   }
 }
 
-/* Lesson Actions and Cancellation */
-.lesson-actions {
+/* History lesson actions */
+.history-results .lesson-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -3507,7 +3553,7 @@ body {
 
 /* Responsive design for lesson actions */
 @media (max-width: 768px) {
-  .lesson-actions {
+  .history-results .lesson-actions {
     flex-direction: column;
     gap: 8px;
     align-items: stretch;
@@ -4540,8 +4586,10 @@ body {
   background: var(--bg-tertiary);
 }
 .btn-sm {
-  padding: 8px 12px;
+  padding: 10px 16px;
   font-size: 0.9rem;
+  min-height: 40px;
+  border-radius: 8px;
 }
 
 /* Conversation */
@@ -4614,15 +4662,18 @@ body {
 
 .inline-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
+  margin-top: 20px;
   margin-bottom: 12px;
   align-items: center;
+  justify-content: flex-start;
 }
 
 .inline-actions button {
-  height: 32px;
-  padding: 6px 12px;
+  height: auto;
+  padding: 12px 24px;
   font-size: 14px;
+  min-height: 44px;
 }
 
 .grid-two {
