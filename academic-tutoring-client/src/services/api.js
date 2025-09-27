@@ -105,6 +105,30 @@ export const roleAPI = {
       throw error.response?.data || error.message;
     }
   },
+  getTimeConstraints: async () => {
+    try {
+      const res = await api.get('/teacher/time-constraints');
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  updateTimeConstraint: async (id, payload) => {
+    try {
+      const res = await api.put(`/teacher/time-constraints/${id}`, payload);
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  deleteTimeConstraint: async (id) => {
+    try {
+      const res = await api.delete(`/teacher/time-constraints/${id}`);
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
   getTeacherSchedule: async () => {
     try {
       const res = await api.get('/teacher/schedule');
@@ -193,6 +217,30 @@ export const roleAPI = {
       throw error.response?.data || error.message;
     }
   },
+  getTeacherConversations: async () => {
+    try {
+      const res = await api.get('/teacher/conversations');
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  getTeacherConversation: async ({ studentId }) => {
+    try {
+      const res = await api.get('/teacher/conversation', { params: { studentId } });
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  teacherReply: async ({ studentId, message }) => {
+    try {
+      const res = await api.post('/teacher/reply', { studentId, message });
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
   scheduleRequest: async (payload) => {
     try {
       const res = await api.post('/teacher/schedule-requests', payload);
@@ -235,6 +283,46 @@ export const roleAPI = {
       throw error.response?.data || error.message;
     }
   },
+  getChildren: async () => {
+    try {
+      const res = await api.get('/parent/children');
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  addChild: async (childData) => {
+    try {
+      const res = await api.post('/parent/children', childData);
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  removeChild: async (childId) => {
+    try {
+      const res = await api.delete(`/parent/children/${childId}`);
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+    verifyStudentEmail: async (email) => {
+      try {
+        const res = await api.get('/parent/verify-student', { params: { email } });
+        return res.data;
+      } catch (error) {
+        throw error.response?.data || error.message;
+      }
+    },
+    updateChildGrade: async (childId, grade) => {
+      try {
+        const res = await api.put(`/parent/children/${childId}/grade`, { grade });
+        return res.data;
+      } catch (error) {
+        throw error.response?.data || error.message;
+      }
+    },
 
   // Student
   getStudentUpcoming: async () => {
@@ -245,9 +333,49 @@ export const roleAPI = {
       throw error.response?.data || error.message;
     }
   },
+  cancelLesson: async (lessonId) => {
+    try {
+      const res = await api.delete(`/parent/lessons/${lessonId}`);
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
   contactTeacher: async (payload) => {
     try {
       const res = await api.post('/student/contact-teacher', payload);
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  getStudentConversation: async ({ teacherEmail, teacherId }) => {
+    try {
+      const res = await api.get('/student/messages', { params: { teacherEmail, teacherId } });
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  getStudentConversations: async () => {
+    try {
+      const res = await api.get('/student/conversations');
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  updateProfile: async (profileData) => {
+    try {
+      const res = await api.put('/profile', profileData);
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  deleteAccount: async () => {
+    try {
+      const res = await api.delete('/profile');
       return res.data;
     } catch (error) {
       throw error.response?.data || error.message;

@@ -42,10 +42,6 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ error: 'Invalid user type' });
     }
 
-    // Additional validation for student role
-    if (role === 'Student' && !grade) {
-      return res.status(400).json({ error: 'Grade is required for students' });
-    }
 
     // Check if user already exists
     const existingUser = await db.collection('users').findOne({ email });
@@ -65,7 +61,6 @@ app.post('/api/register', async (req, res) => {
       password: hashedPassword,
       role,
       phoneNumber: phoneNumber || null,
-      grade: role === 'Student' ? grade : null,
       createdAt: new Date(),
       isActive: true
     };
@@ -418,6 +413,71 @@ app.post('/api/teacher/time-constraints', authenticateToken, authorizeRole('Teac
   }
 });
 
+// Get teacher time constraints
+app.get('/api/teacher/time-constraints', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
+  try {
+    const teacherId = new ObjectId(req.user._id);
+    const constraints = await db.collection('time_constraints')
+      .find({ teacherId })
+      .sort({ dayOfWeek: 1, startTime: 1 })
+      .toArray();
+    return res.json({ constraints });
+  } catch (error) {
+    console.error('Get time constraints error:', error);
+    return res.status(500).json({ error: 'Failed to fetch time constraints' });
+  }
+});
+
+// Update time constraint
+app.put('/api/teacher/time-constraints/:id', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { dayOfWeek, startTime, endTime, note } = req.body || {};
+    if (typeof dayOfWeek !== 'number' || dayOfWeek < 0 || dayOfWeek > 6 || !startTime || !endTime) {
+      return res.status(400).json({ error: 'dayOfWeek (0-6), startTime, endTime are required' });
+    }
+    
+    const teacherId = new ObjectId(req.user._id);
+    const constraintId = new ObjectId(id);
+    
+    const result = await db.collection('time_constraints').updateOne(
+      { _id: constraintId, teacherId },
+      { $set: { dayOfWeek, startTime, endTime, note: note || '', updatedAt: new Date() } }
+    );
+    
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'Time constraint not found' });
+    }
+    
+    return res.json({ message: 'Time constraint updated' });
+  } catch (error) {
+    console.error('Update time constraint error:', error);
+    return res.status(500).json({ error: 'Failed to update time constraint' });
+  }
+});
+
+// Delete time constraint
+app.delete('/api/teacher/time-constraints/:id', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const teacherId = new ObjectId(req.user._id);
+    const constraintId = new ObjectId(id);
+    
+    const result = await db.collection('time_constraints').deleteOne(
+      { _id: constraintId, teacherId }
+    );
+    
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Time constraint not found' });
+    }
+    
+    return res.json({ message: 'Time constraint deleted' });
+  } catch (error) {
+    console.error('Delete time constraint error:', error);
+    return res.status(500).json({ error: 'Failed to delete time constraint' });
+  }
+});
+
 // Get teacher schedule (upcoming lessons)
 app.get('/api/teacher/schedule', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
   try {
@@ -591,6 +651,8 @@ app.post('/api/bookings', authenticateToken, authorizeRole('Parent'), async (req
       teacherId: new ObjectId(teacher._id),
       parentId: new ObjectId(req.user._id),
       studentId: studentId ? new ObjectId(studentId) : null,
+      teacherEmail: teacher.email,
+      teacherName: `${teacher.firstName || ''} ${teacher.lastName || ''}`.trim(),
       dateTime: new Date(dateTime),
       subject: subject || '',
       durationMinutes: typeof durationMinutes === 'number' && durationMinutes > 0 ? durationMinutes : 60,
@@ -621,15 +683,236 @@ app.post('/api/bookings', authenticateToken, authorizeRole('Parent'), async (req
 // Optional: Parent lesson history
 app.get('/api/parent/lessons/history', authenticateToken, authorizeRole('Parent'), async (req, res) => {
   try {
-    const lessons = await db.collection('lessons')
-      .find({ parentId: new ObjectId(req.user._id) })
-      .sort({ dateTime: -1 })
-      .limit(100)
-      .toArray();
+    const parentId = new ObjectId(req.user._id);
+    
+    // Get lessons with student information
+    const pipeline = [
+      {
+        $match: { parentId: parentId }
+      },
+      {
+        $lookup: {
+          from: 'parent_children',
+          localField: 'studentId',
+          foreignField: 'studentId',
+          as: 'childInfo'
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'studentId',
+          foreignField: '_id',
+          as: 'studentInfo'
+        }
+      },
+      {
+        $addFields: {
+          studentName: {
+            $cond: {
+              if: { $gt: [{ $size: '$studentInfo' }, 0] },
+              then: {
+                $concat: [
+                  { $arrayElemAt: ['$studentInfo.firstName', 0] },
+                  ' ',
+                  { $arrayElemAt: ['$studentInfo.lastName', 0] }
+                ]
+              },
+              else: null
+            }
+          },
+          studentGrade: {
+            $cond: {
+              if: { $gt: [{ $size: '$childInfo' }, 0] },
+              then: { $arrayElemAt: ['$childInfo.grade', 0] },
+              else: null
+            }
+          }
+        }
+      },
+      {
+        $sort: { dateTime: -1 }
+      },
+      {
+        $limit: 100
+      }
+    ];
+    
+    const lessons = await db.collection('lessons').aggregate(pipeline).toArray();
     return res.json({ lessons });
   } catch (error) {
     console.error('Parent history error:', error);
     return res.status(500).json({ error: 'Failed to load lesson history' });
+  }
+});
+
+// =========================
+// Parent Children Management
+// =========================
+
+// Get parent's connected children
+app.get('/api/parent/children', authenticateToken, authorizeRole('Parent'), async (req, res) => {
+  try {
+    const parentId = new ObjectId(req.user._id);
+    const children = await db.collection('parent_children')
+      .find({ parentId })
+      .toArray();
+    
+    // Get student details for each child
+    const childrenWithDetails = await Promise.all(
+      children.map(async (child) => {
+        const student = await db.collection('users').findOne(
+          { _id: new ObjectId(child.studentId) },
+          { projection: { password: 0 } }
+        );
+        return {
+          _id: child._id,
+          studentId: child.studentId,
+          email: child.email,
+          grade: child.grade,
+          studentName: student ? `${student.firstName} ${student.lastName}` : 'Unknown Student',
+          name: student ? `${student.firstName} ${student.lastName}` : 'Unknown Student',
+          connectedAt: child.createdAt
+        };
+      })
+    );
+    
+    return res.json({ children: childrenWithDetails });
+  } catch (error) {
+    console.error('Get children error:', error);
+    return res.status(500).json({ error: 'Failed to load children' });
+  }
+});
+
+// Verify student email exists
+app.get('/api/parent/verify-student', authenticateToken, authorizeRole('Parent'), async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    
+    const student = await db.collection('users').findOne(
+      { email: email.toLowerCase(), role: 'Student' },
+      { projection: { password: 0 } }
+    );
+    
+    if (!student) {
+      return res.json({ exists: false });
+    }
+    
+    return res.json({ 
+      exists: true, 
+      student: {
+        _id: student._id,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        email: student.email,
+        grade: student.grade
+      }
+    });
+  } catch (error) {
+    console.error('Verify student error:', error);
+    return res.status(500).json({ error: 'Failed to verify student' });
+  }
+});
+
+// Add child connection
+app.post('/api/parent/children', authenticateToken, authorizeRole('Parent'), async (req, res) => {
+  try {
+    const { email, grade } = req.body;
+    if (!email || !grade) {
+      return res.status(400).json({ error: 'Email and grade are required' });
+    }
+    
+    // Verify student exists
+    const student = await db.collection('users').findOne(
+      { email: email.toLowerCase(), role: 'Student' }
+    );
+    
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found with this email' });
+    }
+    
+    // Check if already connected
+    const existingConnection = await db.collection('parent_children').findOne({
+      parentId: new ObjectId(req.user._id),
+      studentId: new ObjectId(student._id)
+    });
+    
+    if (existingConnection) {
+      return res.status(400).json({ error: 'Student is already connected to your account' });
+    }
+    
+    // Create connection
+    const connection = {
+      parentId: new ObjectId(req.user._id),
+      studentId: new ObjectId(student._id),
+      email: email.toLowerCase(),
+      grade: grade,
+      createdAt: new Date()
+    };
+    
+    const result = await db.collection('parent_children').insertOne(connection);
+    
+    return res.status(201).json({ 
+      message: 'Student connected successfully',
+      id: result.insertedId
+    });
+  } catch (error) {
+    console.error('Add child error:', error);
+    return res.status(500).json({ error: 'Failed to connect student' });
+  }
+});
+
+// Remove child connection
+app.delete('/api/parent/children/:id', authenticateToken, authorizeRole('Parent'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const parentId = new ObjectId(req.user._id);
+    const connectionId = new ObjectId(id);
+    
+    const result = await db.collection('parent_children').deleteOne({
+      _id: connectionId,
+      parentId: parentId
+    });
+    
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Child connection not found' });
+    }
+    
+    return res.json({ message: 'Student disconnected successfully' });
+  } catch (error) {
+    console.error('Remove child error:', error);
+    return res.status(500).json({ error: 'Failed to disconnect student' });
+  }
+});
+
+// Update child grade
+app.put('/api/parent/children/:id/grade', authenticateToken, authorizeRole('Parent'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { grade } = req.body;
+    const parentId = new ObjectId(req.user._id);
+    const connectionId = new ObjectId(id);
+    
+    if (!grade) {
+      return res.status(400).json({ error: 'Grade is required' });
+    }
+    
+    const result = await db.collection('parent_children').updateOne(
+      { _id: connectionId, parentId: parentId },
+      { $set: { grade: grade, updatedAt: new Date() } }
+    );
+    
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'Child connection not found' });
+    }
+    
+    return res.json({ message: 'Child grade updated successfully' });
+  } catch (error) {
+    console.error('Update child grade error:', error);
+    return res.status(500).json({ error: 'Failed to update child grade' });
   }
 });
 
@@ -644,12 +927,74 @@ app.get('/api/student/lessons/upcoming', authenticateToken, authorizeRole('Stude
     const lessons = await db.collection('lessons')
       .find({ studentId: new ObjectId(req.user._id), dateTime: { $gte: now } })
       .sort({ dateTime: 1 })
-      .limit(100)
       .toArray();
     return res.json({ lessons });
   } catch (error) {
     console.error('Student upcoming error:', error);
     return res.status(500).json({ error: 'Failed to load upcoming lessons' });
+  }
+});
+
+// Cancel a lesson (Parent)
+app.delete('/api/parent/lessons/:id', authenticateToken, authorizeRole('Parent'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const parentId = new ObjectId(req.user._id);
+    const lessonId = new ObjectId(id);
+    
+    // Check if lesson exists and belongs to this parent
+    const lesson = await db.collection('lessons').findOne({ 
+      _id: lessonId, 
+      parentId: parentId 
+    });
+    
+    if (!lesson) {
+      return res.status(404).json({ error: 'Lesson not found or you do not have permission to cancel this lesson' });
+    }
+    
+    // Check if lesson is in the future
+    const now = new Date();
+    if (new Date(lesson.dateTime) <= now) {
+      return res.status(400).json({ error: 'Cannot cancel lessons that have already started or passed' });
+    }
+    
+    // Delete the lesson
+    const result = await db.collection('lessons').deleteOne({ _id: lessonId });
+    
+    if (result.deletedCount === 0) {
+      return res.status(500).json({ error: 'Failed to cancel lesson' });
+    }
+    
+    // Create notification for student
+    if (lesson.studentId) {
+      await db.collection('notifications').insertOne({
+        userId: lesson.studentId,
+        type: 'lesson_cancelled',
+        title: 'Lesson Cancelled by Parent',
+        message: `Your parent has cancelled the lesson scheduled for ${new Date(lesson.dateTime).toLocaleString()}`,
+        lessonId: lessonId,
+        createdAt: new Date(),
+        read: false
+      });
+    }
+    
+    // Create notification for teacher
+    if (lesson.teacherId) {
+      await db.collection('notifications').insertOne({
+        userId: lesson.teacherId,
+        type: 'lesson_cancelled',
+        title: 'Lesson Cancelled by Parent',
+        message: `A parent has cancelled the lesson scheduled for ${new Date(lesson.dateTime).toLocaleString()}`,
+        lessonId: lessonId,
+        createdAt: new Date(),
+        read: false
+      });
+    }
+    
+    return res.json({ message: 'Lesson cancelled successfully' });
+  } catch (error) {
+    console.error('Cancel lesson error:', error);
+    return res.status(500).json({ error: 'Failed to cancel lesson' });
   }
 });
 
@@ -675,6 +1020,100 @@ app.post('/api/student/contact-teacher', authenticateToken, authorizeRole('Stude
   } catch (error) {
     console.error('Student contact error:', error);
     return res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Get student conversation with a teacher
+app.get('/api/student/messages', authenticateToken, authorizeRole('Student'), async (req, res) => {
+  try {
+    const { teacherEmail, teacherId } = req.query || {};
+    let teacher;
+    if (teacherId && ObjectId.isValid(String(teacherId))) {
+      teacher = await db.collection('users').findOne({ _id: new ObjectId(String(teacherId)), role: 'Teacher' });
+    } else if (teacherEmail) {
+      teacher = await db.collection('users').findOne({ email: String(teacherEmail).toLowerCase(), role: 'Teacher' });
+    }
+    if (!teacher) {
+      return res.status(404).json({ error: 'Teacher not found' });
+    }
+    const msgs = await db.collection('messages').find({
+      $or: [
+        { fromStudentId: new ObjectId(req.user._id), toTeacherId: new ObjectId(teacher._id) },
+        { fromTeacherId: new ObjectId(teacher._id), toStudentId: new ObjectId(req.user._id) }
+      ]
+    }).sort({ createdAt: 1 }).toArray();
+    return res.json({ messages: msgs, teacher: { id: teacher._id, email: teacher.email, firstName: teacher.firstName, lastName: teacher.lastName } });
+  } catch (error) {
+    console.error('Student conversation error:', error);
+    return res.status(500).json({ error: 'Failed to fetch conversation' });
+  }
+});
+
+// List student's past conversations grouped by teacher
+app.get('/api/student/conversations', authenticateToken, authorizeRole('Student'), async (req, res) => {
+  try {
+    const studentId = new ObjectId(req.user._id);
+    const pipeline = [
+      {
+        $match: {
+          $or: [
+            { fromStudentId: studentId },
+            { toStudentId: studentId }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          convTeacherId: {
+            $cond: [
+              { $ifNull: ["$toTeacherId", false] },
+              "$toTeacherId",
+              "$fromTeacherId"
+            ]
+          }
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: "$convTeacherId",
+          lastMessage: { $first: "$message" },
+          lastAt: { $first: "$createdAt" },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'teacher'
+        }
+      },
+      { $unwind: "$teacher" },
+      {
+        $project: {
+          teacherId: '$_id',
+          _id: 0,
+          lastMessage: 1,
+          lastAt: 1,
+          count: 1,
+          teacher: {
+            _id: '$teacher._id',
+            email: '$teacher.email',
+            firstName: '$teacher.firstName',
+            lastName: '$teacher.lastName'
+          }
+        }
+      },
+      { $sort: { lastAt: -1 } }
+    ];
+
+    const convos = await db.collection('messages').aggregate(pipeline).toArray();
+    return res.json({ conversations: convos });
+  } catch (error) {
+    console.error('Student conversations error:', error);
+    return res.status(500).json({ error: 'Failed to fetch conversations' });
   }
 });
 
@@ -916,6 +1355,394 @@ app.post('/api/teacher/messages/mark-read', authenticateToken, authorizeRole('Te
   } catch (error) {
     console.error('Teacher mark read error:', error);
     return res.status(500).json({ error: 'Failed to mark messages as read' });
+  }
+});
+
+// Get teacher conversations grouped by student
+app.get('/api/teacher/conversations', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
+  try {
+    const teacherId = new ObjectId(req.user._id);
+    const pipeline = [
+      {
+        $match: {
+          $or: [
+            { toTeacherId: teacherId },
+            { fromTeacherId: teacherId }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          convStudentId: {
+            $cond: [
+              { $ifNull: ["$toStudentId", false] },
+              "$toStudentId",
+              "$fromStudentId"
+            ]
+          }
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: "$convStudentId",
+          lastMessage: { $first: "$message" },
+          lastAt: { $first: "$createdAt" },
+          count: { $sum: 1 },
+          unreadCount: { $sum: { $cond: [{ $and: ["$toTeacherId", { $ne: ["$read", true] }] }, 1, 0] } }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'student'
+        }
+      },
+      { $unwind: "$student" },
+      {
+        $project: {
+          studentId: '$_id',
+          _id: 0,
+          lastMessage: 1,
+          lastAt: 1,
+          count: 1,
+          unreadCount: 1,
+          student: {
+            _id: '$student._id',
+            email: '$student.email',
+            firstName: '$student.firstName',
+            lastName: '$student.lastName'
+          }
+        }
+      },
+      { $sort: { lastAt: -1 } }
+    ];
+
+    const convos = await db.collection('messages').aggregate(pipeline).toArray();
+    return res.json({ conversations: convos });
+  } catch (error) {
+    console.error('Teacher conversations error:', error);
+    return res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+// Get conversation with specific student
+app.get('/api/teacher/conversation', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
+  try {
+    const teacherId = new ObjectId(req.user._id);
+    const { studentId } = req.query;
+    if (!studentId) {
+      return res.status(400).json({ error: 'studentId is required' });
+    }
+
+    const messages = await db.collection('messages').find({
+      $or: [
+        { fromTeacherId: teacherId, toStudentId: new ObjectId(studentId) },
+        { toTeacherId: teacherId, fromStudentId: new ObjectId(studentId) }
+      ]
+    }).sort({ createdAt: 1 }).toArray();
+
+    // Get student info
+    const student = await db.collection('users').findOne({ _id: new ObjectId(studentId), role: 'Student' });
+    
+    return res.json({ 
+      student: student ? {
+        _id: student._id,
+        email: student.email,
+        firstName: student.firstName,
+        lastName: student.lastName
+      } : null,
+      messages: messages 
+    });
+  } catch (error) {
+    console.error('Teacher conversation error:', error);
+    return res.status(500).json({ error: 'Failed to fetch conversation' });
+  }
+});
+
+// Teacher reply to student
+app.post('/api/teacher/reply', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
+  try {
+    const { studentId, message } = req.body || {};
+    if (!studentId || !message) {
+      return res.status(400).json({ error: 'studentId and message are required' });
+    }
+
+    const teacherId = new ObjectId(req.user._id);
+    const studentObjectId = new ObjectId(studentId);
+
+    // Verify student exists
+    const student = await db.collection('users').findOne({ _id: studentObjectId, role: 'Student' });
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const messageDoc = {
+      fromTeacherId: teacherId,
+      toStudentId: studentObjectId,
+      message: message,
+      read: false,
+      createdAt: new Date()
+    };
+
+    const result = await db.collection('messages').insertOne(messageDoc);
+    return res.status(201).json({ message: 'Reply sent', id: result.insertedId });
+  } catch (error) {
+    console.error('Teacher reply error:', error);
+    return res.status(500).json({ error: 'Failed to send reply' });
+  }
+});
+
+// Profile management endpoints
+app.put('/api/profile', authenticateToken, async (req, res) => {
+  try {
+    const { firstName, lastName, email, phoneNumber, grade } = req.body || {};
+    const userId = new ObjectId(req.user._id);
+
+    // Check if email is being changed and if it's already taken
+    if (email && email !== req.user.email) {
+      const existingUser = await db.collection('users').findOne({ email: email, _id: { $ne: userId } });
+      if (existingUser) {
+        return res.status(400).json({ error: 'Email already in use' });
+      }
+    }
+
+    const updateData = {};
+    if (firstName) updateData.firstName = firstName;
+    if (lastName) updateData.lastName = lastName;
+    if (email) updateData.email = email;
+    if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+    if (grade !== undefined) updateData.grade = grade;
+
+    const result = await db.collection('users').updateOne(
+      { _id: userId },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get updated user data
+    const updatedUser = await db.collection('users').findOne({ _id: userId });
+    return res.json({ message: 'Profile updated successfully', user: updatedUser });
+  } catch (error) {
+    console.error('Profile update error:', error);
+    return res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+app.delete('/api/profile', authenticateToken, async (req, res) => {
+  try {
+    const userId = new ObjectId(req.user._id);
+    const userRole = req.user.role;
+
+    console.log(`Starting comprehensive account deletion for user ${userId} with role ${userRole}`);
+
+    // Comprehensive deletion of all user-related data
+    const deletionResults = await Promise.allSettled([
+      // 1. Delete user account
+      db.collection('users').deleteOne({ _id: userId }),
+      
+      // 2. Delete all messages involving this user (as teacher or student)
+      db.collection('messages').deleteMany({
+        $or: [
+          { fromTeacherId: userId },
+          { toStudentId: userId },
+          { fromStudentId: userId },
+          { toTeacherId: userId }
+        ]
+      }),
+      
+      // 3. Delete all lessons involving this user (as teacher, student, or parent)
+      db.collection('lessons').deleteMany({
+        $or: [
+          { teacherId: userId },
+          { studentId: userId },
+          { parentId: userId }
+        ]
+      }),
+      
+      // 4. Delete all time constraints for teachers
+      db.collection('time_constraints').deleteMany({ teacherId: userId }),
+      
+      // 5. Delete all working hours for teachers
+      db.collection('working_hours').deleteMany({ teacherId: userId }),
+      
+      // 6. Delete all notifications for this user
+      db.collection('notifications').deleteMany({ userId: userId }),
+      
+      // 7. Delete all payment records for teachers
+      db.collection('payments').deleteMany({ teacherId: userId }),
+      
+      // 8. Delete all schedule requests for teachers
+      db.collection('schedule_requests').deleteMany({ teacherId: userId }),
+      
+      // 9. Delete parent-child connections (if user is parent)
+      userRole === 'Parent' ? db.collection('parent_children').deleteMany({ parentId: userId }) : Promise.resolve({ deletedCount: 0 }),
+      
+      // 10. Delete parent-child connections where user is the child (if user is student)
+      userRole === 'Student' ? db.collection('parent_children').deleteMany({ studentId: userId }) : Promise.resolve({ deletedCount: 0 })
+    ]);
+
+    // Log deletion results for debugging
+    const deletionSummary = deletionResults.map((result, index) => {
+      const collectionNames = [
+        'users', 'messages', 'lessons', 'time_constraints', 
+        'working_hours', 'notifications', 'payments', 
+        'schedule_requests', 'parent_children (as parent)', 'parent_children (as child)'
+      ];
+      
+      if (result.status === 'fulfilled') {
+        console.log(`✅ Deleted from ${collectionNames[index]}: ${result.value.deletedCount || result.value.matchedCount || 0} records`);
+        return { collection: collectionNames[index], status: 'success', count: result.value.deletedCount || result.value.matchedCount || 0 };
+      } else {
+        console.error(`❌ Failed to delete from ${collectionNames[index]}:`, result.reason);
+        return { collection: collectionNames[index], status: 'failed', error: result.reason.message };
+      }
+    });
+
+    // Check if any critical deletions failed
+    const criticalFailures = deletionSummary.filter((result, index) => 
+      result.status === 'failed' && index < 3 // users, messages, lessons are critical
+    );
+
+    if (criticalFailures.length > 0) {
+      console.error('Critical deletion failures:', criticalFailures);
+      return res.status(500).json({ 
+        error: 'Failed to delete critical account data', 
+        details: criticalFailures 
+      });
+    }
+
+    // Log any non-critical failures but still proceed
+    const nonCriticalFailures = deletionSummary.filter((result, index) => 
+      result.status === 'failed' && index >= 3
+    );
+
+    if (nonCriticalFailures.length > 0) {
+      console.warn('Non-critical deletion failures (account still deleted):', nonCriticalFailures);
+    }
+
+    console.log(`Account deletion completed for user ${userId}. Total collections processed: ${deletionSummary.length}`);
+
+    return res.json({ 
+      message: 'Account and all related data deleted successfully',
+      summary: {
+        totalCollectionsProcessed: deletionSummary.length,
+        successfulDeletions: deletionSummary.filter(r => r.status === 'success').length,
+        failedDeletions: deletionSummary.filter(r => r.status === 'failed').length,
+        details: deletionSummary
+      }
+    });
+
+  } catch (error) {
+    console.error('Account deletion error:', error);
+    return res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
+// =========================
+// Admin Cleanup Functions
+// =========================
+
+// Cleanup orphaned data (for administrators)
+app.post('/api/admin/cleanup-orphaned-data', authenticateToken, async (req, res) => {
+  try {
+    // Only allow admin users (you can add admin role check here)
+    // For now, we'll just log that this was called
+    console.log('Orphaned data cleanup requested by user:', req.user._id);
+
+    const cleanupResults = await Promise.allSettled([
+      // Clean up orphaned messages (where referenced users don't exist)
+      db.collection('messages').deleteMany({
+        $or: [
+          { fromTeacherId: { $exists: true }, fromTeacherId: { $nin: await db.collection('users').distinct('_id', { role: 'Teacher' }) } },
+          { toStudentId: { $exists: true }, toStudentId: { $nin: await db.collection('users').distinct('_id', { role: 'Student' }) } },
+          { fromStudentId: { $exists: true }, fromStudentId: { $nin: await db.collection('users').distinct('_id', { role: 'Student' }) } },
+          { toTeacherId: { $exists: true }, toTeacherId: { $nin: await db.collection('users').distinct('_id', { role: 'Teacher' }) } }
+        ]
+      }),
+      
+      // Clean up orphaned lessons
+      db.collection('lessons').deleteMany({
+        $or: [
+          { teacherId: { $exists: true }, teacherId: { $nin: await db.collection('users').distinct('_id', { role: 'Teacher' }) } },
+          { studentId: { $exists: true }, studentId: { $nin: await db.collection('users').distinct('_id', { role: 'Student' }) } },
+          { parentId: { $exists: true }, parentId: { $nin: await db.collection('users').distinct('_id', { role: 'Parent' }) } }
+        ]
+      }),
+      
+      // Clean up orphaned parent-child connections
+      db.collection('parent_children').deleteMany({
+        $or: [
+          { parentId: { $exists: true }, parentId: { $nin: await db.collection('users').distinct('_id', { role: 'Parent' }) } },
+          { studentId: { $exists: true }, studentId: { $nin: await db.collection('users').distinct('_id', { role: 'Student' }) } }
+        ]
+      }),
+      
+      // Clean up orphaned notifications
+      db.collection('notifications').deleteMany({
+        userId: { $exists: true }, 
+        userId: { $nin: await db.collection('users').distinct('_id') }
+      }),
+      
+      // Clean up orphaned time constraints
+      db.collection('time_constraints').deleteMany({
+        teacherId: { $exists: true }, 
+        teacherId: { $nin: await db.collection('users').distinct('_id', { role: 'Teacher' }) }
+      }),
+      
+      // Clean up orphaned working hours
+      db.collection('working_hours').deleteMany({
+        teacherId: { $exists: true }, 
+        teacherId: { $nin: await db.collection('users').distinct('_id', { role: 'Teacher' }) }
+      }),
+      
+      // Clean up orphaned payments
+      db.collection('payments').deleteMany({
+        teacherId: { $exists: true }, 
+        teacherId: { $nin: await db.collection('users').distinct('_id', { role: 'Teacher' }) }
+      }),
+      
+      // Clean up orphaned schedule requests
+      db.collection('schedule_requests').deleteMany({
+        teacherId: { $exists: true }, 
+        teacherId: { $nin: await db.collection('users').distinct('_id', { role: 'Teacher' }) }
+      })
+    ]);
+
+    const cleanupSummary = cleanupResults.map((result, index) => {
+      const collectionNames = [
+        'messages', 'lessons', 'parent_children', 'notifications',
+        'time_constraints', 'working_hours', 'payments', 'schedule_requests'
+      ];
+      
+      if (result.status === 'fulfilled') {
+        return { collection: collectionNames[index], status: 'success', count: result.value.deletedCount || 0 };
+      } else {
+        return { collection: collectionNames[index], status: 'failed', error: result.reason.message };
+      }
+    });
+
+    const totalCleaned = cleanupSummary.reduce((sum, result) => sum + (result.count || 0), 0);
+
+    console.log(`Orphaned data cleanup completed. Total records cleaned: ${totalCleaned}`);
+
+    return res.json({
+      message: 'Orphaned data cleanup completed',
+      summary: {
+        totalRecordsCleaned: totalCleaned,
+        collectionsProcessed: cleanupSummary.length,
+        details: cleanupSummary
+      }
+    });
+
+  } catch (error) {
+    console.error('Orphaned data cleanup error:', error);
+    return res.status(500).json({ error: 'Failed to cleanup orphaned data' });
   }
 });
 

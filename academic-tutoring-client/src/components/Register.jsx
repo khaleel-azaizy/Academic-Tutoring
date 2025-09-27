@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
+import { useToast } from '../contexts/ToastContext';
 import '../styles/Auth.css';
 
 const Register = () => {
   const navigate = useNavigate();
+  const { showError, showSuccess } = useToast();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -12,12 +14,9 @@ const Register = () => {
     password: '',
     confirmPassword: '',
     role: '',
-    phoneNumber: '',
-    grade: ''
+    phoneNumber: ''
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -26,53 +25,46 @@ const Register = () => {
       [name]: value
     }));
     
-    // Clear error when user starts typing
-    if (error) setError('');
   };
 
   const handleRoleSelect = (role) => {
     setFormData(prev => ({
       ...prev,
-      role,
-      grade: role !== 'Student' ? '' : prev.grade
+      role
     }));
   };
 
   const validateForm = () => {
     if (!formData.firstName.trim()) {
-      setError('First name is required');
+      showError('First name is required');
       return false;
     }
     if (!formData.lastName.trim()) {
-      setError('Last name is required');
+      showError('Last name is required');
       return false;
     }
     if (!formData.email.trim()) {
-      setError('Email is required');
+      showError('Email is required');
       return false;
     }
     if (!formData.email.includes('@')) {
-      setError('Invalid email format');
+      showError('Invalid email format');
       return false;
     }
     if (!formData.password) {
-      setError('Password is required');
+      showError('Password is required');
       return false;
     }
     if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+      showError('Password must be at least 6 characters');
       return false;
     }
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
+      showError('Passwords do not match');
       return false;
     }
     if (!formData.role) {
-      setError('Please select a user type');
-      return false;
-    }
-    if (formData.role === 'Student' && !formData.grade.trim()) {
-      setError('Grade is required for students');
+      showError('Please select a user type');
       return false;
     }
     return true;
@@ -84,8 +76,6 @@ const Register = () => {
     if (!validateForm()) return;
 
     setLoading(true);
-    setError('');
-    setSuccess('');
 
     try {
       const registrationData = {
@@ -94,13 +84,12 @@ const Register = () => {
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
         role: formData.role,
-        phoneNumber: formData.phoneNumber.trim() || undefined,
-        grade: formData.role === 'Student' ? formData.grade.trim() : undefined
+        phoneNumber: formData.phoneNumber.trim() || undefined
       };
 
       const response = await authAPI.register(registrationData);
       
-      setSuccess('Registration successful! Redirecting to dashboard...');
+      showSuccess('Registration successful! Redirecting to dashboard...');
       
       // Store user data
       if (response.user) {
@@ -114,16 +103,12 @@ const Register = () => {
 
     } catch (error) {
       console.error('Registration error:', error);
-      setError(error.error || 'Registration failed. Please try again.');
+      showError(error.error || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const grades = [
-    'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6',
-    'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'
-  ];
 
   return (
     <div className="auth-container">
@@ -133,8 +118,6 @@ const Register = () => {
           <p className="auth-subtitle">Join our tutoring platform</p>
         </div>
 
-        {error && <div className="error-message">{error}</div>}
-        {success && <div className="success-message">{success}</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
@@ -212,25 +195,6 @@ const Register = () => {
             </div>
           </div>
 
-          {formData.role === 'Student' && (
-            <div className="form-group">
-              <label className="form-label">Grade *</label>
-              <select
-                name="grade"
-                value={formData.grade}
-                onChange={handleInputChange}
-                className="form-select"
-                required
-              >
-                <option value="">Select Grade</option>
-                {grades.map(grade => (
-                  <option key={grade} value={grade}>
-                    {grade}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
 
           <div className="form-group">
             <label className="form-label">Password *</label>

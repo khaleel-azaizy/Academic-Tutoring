@@ -1,16 +1,17 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
+import { useToast } from '../contexts/ToastContext';
 import '../styles/Auth.css';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { showError, showSuccess } = useToast();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -19,21 +20,19 @@ const Login = () => {
       [name]: value
     }));
     
-    // Clear error when user starts typing
-    if (error) setError('');
   };
 
   const validateForm = () => {
     if (!formData.email.trim()) {
-      setError('Email is required');
+      showError('Email is required');
       return false;
     }
     if (!formData.email.includes('@')) {
-      setError('Invalid email format');
+      showError('Invalid email format');
       return false;
     }
     if (!formData.password) {
-      setError('Password is required');
+      showError('Password is required');
       return false;
     }
     return true;
@@ -45,7 +44,6 @@ const Login = () => {
     if (!validateForm()) return;
 
     setLoading(true);
-    setError('');
 
     try {
       const loginData = {
@@ -60,6 +58,7 @@ const Login = () => {
         localStorage.setItem('user', JSON.stringify(response.user));
       }
 
+      showSuccess('Login successful!');
       // Redirect based on user role
       const userRole = response.user?.role;
       switch (userRole) {
@@ -78,7 +77,7 @@ const Login = () => {
 
     } catch (error) {
       console.error('Login error:', error);
-      setError(error.error || 'Login failed. Please check your credentials and try again.');
+      showError(error.error || 'Login failed. Please check your credentials and try again.');
     } finally {
       setLoading(false);
     }
@@ -92,7 +91,6 @@ const Login = () => {
           <p className="auth-subtitle">Welcome back to our platform</p>
         </div>
 
-        {error && <div className="error-message">{error}</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">

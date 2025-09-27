@@ -3,13 +3,17 @@ import Login from './components/Login';
 import Register from './components/Register';
 import Dashboard from './components/Dashboard';
 import ProtectedRoute from './components/ProtectedRoute';
+import { ToastProvider } from './contexts/ToastContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import './App.css';
 
 function App() {
   return (
-    <Router>
-      <div className="App">
-        <Routes>
+    <ThemeProvider>
+      <ToastProvider>
+        <Router>
+          <div className="App">
+            <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -57,9 +61,11 @@ function App() {
           
           {/* 404 fallback */}
           <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </div>
-    </Router>
+            </Routes>
+          </div>
+        </Router>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }
 
