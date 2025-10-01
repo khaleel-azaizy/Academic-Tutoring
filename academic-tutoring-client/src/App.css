@@ -119,6 +119,32 @@
   gap: 16px;
 }
 
+/* Lesson timing indicators */
+.lesson-timing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.timing-text {
+  font-size: 14px;
+  color: var(--text-muted);
+  padding: 8px 12px;
+  background: var(--bg-subtle);
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  text-align: center;
+  min-width: 200px;
+}
+
+.timing-text.available {
+  color: var(--accent-success);
+  background: var(--accent-success-light, rgba(76, 175, 80, 0.1));
+  border-color: var(--accent-success);
+  font-weight: 500;
+}
+
 .lesson-card {
   background: var(--bg-card);
   border: 1px solid var(--border-primary);

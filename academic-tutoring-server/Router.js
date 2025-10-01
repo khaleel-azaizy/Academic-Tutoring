@@ -2052,7 +2052,7 @@ app.get('/api/admin/dashboard', authenticateToken, authorizeRole('Admin'), async
   try {
     const users = await db.collection('users').find({}, { projection: { password: 0 } }).toArray();
     const lessons = await db.collection('lessons').find({}).toArray();
-    const teacherHours = await db.collection('teacherHours').find({}).toArray();
+    const teacherHours = await db.collection('working_hours').find({}).toArray();
 
     const stats = {
       totalUsers: users.length,
@@ -2186,7 +2186,7 @@ app.get('/api/admin/teacher-payments', authenticateToken, authorizeRole('Admin')
       }
     }
 
-    const teacherHours = await db.collection('teacherHours').aggregate([
+    const teacherHours = await db.collection('working_hours').aggregate([
       { $match: query },
       { $lookup: {
           from: 'users',
@@ -2332,7 +2332,7 @@ app.put('/api/admin/teacher-payments/:paymentId/status', authenticateToken, auth
     const { paymentId } = req.params;
     const { status, notes } = req.body; // status: 'pending', 'paid', 'disputed'
 
-    const result = await db.collection('teacherHours').updateOne(
+    const result = await db.collection('working_hours').updateOne(
       { _id: new ObjectId(paymentId) },
       { 
         $set: { 
@@ -2471,7 +2471,7 @@ app.get('/api/admin/teacher-salary-report', authenticateToken, authorizeRole('Ad
     ).toArray();
 
     // Get teacher hours data
-    const teacherHours = await db.collection('teacherHours').aggregate([
+    const teacherHours = await db.collection('working_hours').aggregate([
       { $match: hoursQuery },
       { $lookup: {
           from: 'users',

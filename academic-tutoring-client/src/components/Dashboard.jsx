@@ -674,42 +674,83 @@ const Dashboard = () => {
                               )}
                             </div>
                             <div className="lesson-actions">
-                              {l.status === 'booked' && !l.clockInAt && (
-                                <button className="auth-button btn-sm" onClick={() => handleAction(async () => { 
-                                  await roleAPI.clockIn(l._id); 
-                                  showSuccess('Clocked in'); 
-                                  // Refresh schedule
-                                  const data = await roleAPI.getTeacherSchedule();
-                                  setTeacherLessons(data.lessons || []);
-                                })}>
-                                  <Clock className="icon" /> Clock-in
-                                </button>
-                              )}
-                              {l.status === 'in_progress' && l.clockInAt && !l.clockOutAt && (
-                                <button className="auth-button btn-sm" onClick={() => handleAction(async () => { 
-                                  await roleAPI.clockOut(l._id); 
-                                  showSuccess('Clocked out'); 
-                                  // Refresh schedule
-                                  const data = await roleAPI.getTeacherSchedule();
-                                  setTeacherLessons(data.lessons || []);
-                                })}>
-                                  <Clock className="icon" /> Clock-out
-                                </button>
-                              )}
-                              {l.status === 'completed' && (
-                                <div className="lesson-completed">
-                                  <CheckCircle className="icon" />
-                                  <span>Completed</span>
-                                </div>
-                              )}
-                              {l.status === 'booked' && !l.clockInAt && (
-                                <button className="auth-button btn-sm success" onClick={() => {
-                                  setCompleteLessonState({ lessonId: l._id, workedMinutes: l.durationMinutes || 60 });
-                                  setOpenModal('complete');
-                                }}>
-                                  <CheckCircle className="icon" /> Complete
-                                </button>
-                              )}
+                              {(() => {
+                                const now = new Date();
+                                const lessonTime = new Date(l.dateTime);
+                                const timeUntilLesson = lessonTime - now;
+                                const tenMinutesInMs = 10 * 60 * 1000;
+                                const lessonTimePassed = now > lessonTime;
+                                const noClockActivity = !l.clockInAt && !l.clockOutAt;
+                                
+                                // Clock-in: Show only 10 minutes before lesson
+                                if (l.status === 'booked' && !l.clockInAt && timeUntilLesson <= tenMinutesInMs && timeUntilLesson > 0) {
+                                  return (
+                                    <button className="auth-button btn-sm" onClick={() => handleAction(async () => { 
+                                      await roleAPI.clockIn(l._id); 
+                                      showSuccess('Clocked in'); 
+                                      const data = await roleAPI.getTeacherSchedule();
+                                      setTeacherLessons(data.lessons || []);
+                                    })}>
+                                      <Clock className="icon" /> Clock-in
+                                    </button>
+                                  );
+                                }
+                                
+                                // Clock-out: Show when lesson is in progress
+                                if (l.status === 'in_progress' && l.clockInAt && !l.clockOutAt) {
+                                  return (
+                                    <button className="auth-button btn-sm" onClick={() => handleAction(async () => { 
+                                      await roleAPI.clockOut(l._id); 
+                                      showSuccess('Clocked out'); 
+                                      const data = await roleAPI.getTeacherSchedule();
+                                      setTeacherLessons(data.lessons || []);
+                                    })}>
+                                      <Clock className="icon" /> Clock-out
+                                    </button>
+                                  );
+                                }
+                                
+                                // Complete: Show only if lesson time passed and no clock activity
+                                if (l.status === 'booked' && lessonTimePassed && noClockActivity) {
+                                  return (
+                                    <button className="auth-button btn-sm success" onClick={() => {
+                                      setCompleteLessonState({ lessonId: l._id, workedMinutes: l.durationMinutes || 60 });
+                                      setOpenModal('complete');
+                                    }}>
+                                      <CheckCircle className="icon" /> Complete
+                                    </button>
+                                  );
+                                }
+                                
+                                // Completed status
+                                if (l.status === 'completed') {
+                                  return (
+                                    <div className="lesson-completed">
+                                      <CheckCircle className="icon" />
+                                      <span>Completed</span>
+                                    </div>
+                                  );
+                                }
+                                
+                                // Default: Show lesson timing info
+                                return (
+                                  <div className="lesson-timing">
+                                    {timeUntilLesson > tenMinutesInMs ? (
+                                      <span className="timing-text">
+                                        Clock-in available in {Math.ceil(timeUntilLesson / (60 * 1000))} minutes
+                                      </span>
+                                    ) : timeUntilLesson > 0 ? (
+                                      <span className="timing-text available">
+                                        Clock-in now available
+                                      </span>
+                                    ) : !lessonTimePassed ? (
+                                      <span className="timing-text">
+                                        Lesson starting soon
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
                         ))}
