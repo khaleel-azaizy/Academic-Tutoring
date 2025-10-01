@@ -11,11 +11,12 @@ import {
   UserPlus,
   Home,
   Moon,
-  Sun
+  Sun,
+  Bot
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
-const Header = ({ user, onLogout, onProfile, onBackToDashboard, notifications = [], onMarkAllRead, onMessages, currentView = 'dashboard' }) => {
+const Header = ({ user, onLogout, onProfile, onBackToDashboard, notifications = [], onMarkAllRead, onMessages, onAIChat, currentView = 'dashboard' }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const { isDarkMode, toggleTheme } = useTheme();
 
@@ -121,6 +122,13 @@ const Header = ({ user, onLogout, onProfile, onBackToDashboard, notifications = 
             <button className="messages-btn" onClick={onMessages}>
               <span className="messages-icon"><MessageCircle size={18} /></span>
               Messages
+            </button>
+          )}
+          
+          {onAIChat && (
+            <button className="ai-chat-btn" onClick={onAIChat}>
+              <span className="ai-chat-icon"><Bot size={18} /></span>
+              AI Tutor
             </button>
           )}
           

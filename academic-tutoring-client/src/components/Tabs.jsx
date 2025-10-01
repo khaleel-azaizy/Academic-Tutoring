@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 
-const Tabs = ({ tabs, initialKey }) => {
+const Tabs = ({ tabs, initialKey, activeKey, onTabChange }) => {
   const keys = tabs.map(t => t.key);
-  const [active, setActive] = useState(initialKey || keys[0]);
+  // Use controlled state if provided, otherwise use internal state
+  const [internalActive, setInternalActive] = useState(initialKey || keys[0]);
+  const active = activeKey !== undefined ? activeKey : internalActive;
   const [activeIndex, setActiveIndex] = useState(0);
   const tabsNavRef = useRef(null);
   const activeTab = tabs.find(t => t.key === active) || tabs[0];
@@ -41,7 +43,13 @@ const Tabs = ({ tabs, initialKey }) => {
   }, [active, keys, tabs.length]);
 
   const handleTabClick = (tabKey, index) => {
-    setActive(tabKey);
+    if (activeKey !== undefined && onTabChange) {
+      // Controlled mode - call parent's callback
+      onTabChange(tabKey);
+    } else {
+      // Uncontrolled mode - manage internal state
+      setInternalActive(tabKey);
+    }
     setActiveIndex(index);
     updatePillPosition(index);
   };

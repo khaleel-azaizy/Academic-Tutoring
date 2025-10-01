@@ -1314,6 +1314,38 @@
   justify-content: center;
 }
 
+.ai-chat-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  min-width: 100px;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.ai-chat-btn:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6b4190 100%);
+  border-color: rgba(255,255,255,0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.ai-chat-icon {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .profile-btn {
   display: flex;
   align-items: center;
@@ -3038,6 +3070,31 @@ body {
   animation: spin 1s linear infinite;
 }
 
+.clear-search-btn {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: var(--text-muted);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.clear-search-btn:hover {
+  background: var(--text-primary);
+  transform: translateY(-50%) scale(1.1);
+}
+
 .search-loading-state {
   text-align: center;
   padding: 40px 20px;
@@ -3074,6 +3131,34 @@ body {
   color: var(--text-secondary);
   font-style: italic;
   margin: 0;
+}
+
+.no-teachers {
+  text-align: center;
+  padding: 40px 20px;
+  background: var(--bg-hover);
+  border-radius: 12px;
+  border: 2px dashed var(--border-primary);
+}
+
+.no-teachers-icon {
+  margin-bottom: 16px;
+  color: var(--text-muted);
+}
+
+.no-teachers-icon .icon {
+  width: 48px;
+  height: 48px;
+}
+
+.no-teachers p {
+  color: var(--text-secondary);
+  margin: 8px 0;
+}
+
+.no-teachers-suggestion {
+  font-style: italic;
+  font-size: 0.9rem;
 }
 
 .search-results {
@@ -4712,6 +4797,20 @@ body {
   border: 1px solid var(--border-primary);
 }
 
+.modal-full-width {
+  width: 95%;
+  max-width: 1200px;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-full-width .modal-body {
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+}
+
 .modal-header {
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-primary);
@@ -4868,5 +4967,446 @@ body {
   
   .dashboard-actions li:hover {
     transform: translateX(5px);
+  }
+}
+
+/* ===========================
+   ADMIN PANEL STYLES
+   =========================== */
+
+/* Admin Statistics Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.stat-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: var(--accent-primary);
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+}
+
+.stat-icon .icon {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+
+.stat-content {
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Admin Filters */
+.admin-filters {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.admin-filters .form-input {
+  min-width: 150px;
+  margin: 0;
+}
+
+.admin-filters input[type="text"] {
+  min-width: 200px;
+}
+
+/* Admin Tables */
+.admin-table-container {
+  margin-top: 24px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.admin-table th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-table td {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.admin-table tr:hover {
+  background: var(--bg-tertiary);
+}
+
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* User Status Badges */
+.user-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.user-status-badge.active {
+  background: rgba(34, 197, 94, 0.1);
+  color: #059669;
+}
+
+.user-status-badge.banned {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.user-status-badge .icon {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+}
+
+/* Role Badges */
+.role-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.role-badge.parent {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+}
+
+.role-badge.student {
+  background: rgba(34, 197, 94, 0.1);
+  color: #059669;
+}
+
+.role-badge.teacher {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.role-badge.admin {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+/* Lesson Status Badges */
+.lesson-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 16px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.lesson-status-badge.booked {
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+}
+
+.lesson-status-badge.in_progress {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.lesson-status-badge.completed {
+  background: rgba(34, 197, 94, 0.1);
+  color: #059669;
+}
+
+.lesson-status-badge.cancelled {
+  background: rgba(107, 114, 128, 0.1);
+  color: #6b7280;
+}
+
+/* Admin Action Buttons */
+.admin-action-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-action-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.admin-action-btn.ban {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.admin-action-btn.ban:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.admin-action-btn.unban {
+  background: rgba(34, 197, 94, 0.1);
+  color: #059669;
+}
+
+.admin-action-btn.unban:hover {
+  background: rgba(34, 197, 94, 0.2);
+}
+
+.admin-action-btn.delete {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.admin-action-btn.delete:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.admin-action-btn .icon {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+}
+
+/* Payment Status */
+.payment-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+
+.payment-amount {
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+/* Enhanced salary report styles */
+.salary-teacher-section {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.salary-teacher-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+.stat-card {
+  transition: transform 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-1px);
+}
+
+.admin-table th {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+}
+
+.admin-table tbody tr:hover {
+  background: var(--bg-tertiary);
+  transform: scale(1.001);
+  transition: all 0.2s ease;
+}
+
+.user-status-badge.active {
+  background: linear-gradient(135deg, var(--success-color), #4ade80);
+  color: white;
+  font-weight: 600;
+}
+
+.user-status-badge.banned {
+  background: linear-gradient(135deg, var(--warning-color), #fbbf24);
+  color: white;
+  font-weight: 600;
+}
+
+/* Loading enhancements */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--bg-tertiary);
+  border-top: 4px solid var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Admin empty state styling */
+.admin-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 2px dashed var(--border-light);
+}
+
+.admin-empty .icon {
+  width: 48px;
+  height: 48px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+/* Admin Loading States */
+.admin-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: var(--text-secondary);
+}
+
+.admin-loading .loading-spinner {
+  margin-right: 12px;
+}
+
+/* Admin Empty States */
+.admin-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+}
+
+.admin-empty .icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  opacity: 0.5;
+}
+
+.admin-empty h4 {
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+/* Responsive Admin Panel */
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .admin-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .admin-filters .form-input {
+    min-width: unset;
+  }
+  
+  .admin-table-container {
+    overflow-x: auto;
+  }
+  
+  .admin-table {
+    min-width: 600px;
+  }
+  
+  .admin-action-buttons {
+    flex-direction: column;
+    gap: 4px;
   }
 }

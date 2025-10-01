@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authAPI, roleAPI } from '../services/api';
+import { authAPI, roleAPI, adminAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import Modal from './Modal';
 import Tabs from './Tabs';
 import Header from './Header';
 import Profile from './Profile';
 import MessagesSidebar from './MessagesSidebar';
+import AIChat from './AIChat';
 import { 
   Users, 
   Edit3, 
@@ -24,7 +25,8 @@ import {
   UserCheck,
   RotateCcw,
   FileText,
-  MessageCircle
+  MessageCircle,
+  Bot
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -32,7 +34,8 @@ const Dashboard = () => {
   const { showSuccess, showError, showWarning, showInfo } = useToast();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [openModal, setOpenModal] = useState(null); // 'hours' | 'constraint' | 'book' | 'contact' | 'chat' | 'teacher-chat'
+  const [openModal, setOpenModal] = useState(null); // 'hours' | 'constraint' | 'book' | 'contact' | 'chat' | 'teacher-chat' | 'ai-chat'
+  const [activeTab, setActiveTab] = useState('overview'); // For controlling tabs
 
   // Teacher action state
   const [hoursForm, setHoursForm] = useState({ date: '', hours: '', notes: '' });
@@ -96,6 +99,25 @@ const Dashboard = () => {
   const [teacherSearchQuery, setTeacherSearchQuery] = useState('');
   const [teacherSearchResults, setTeacherSearchResults] = useState([]);
   const [selectedTeacherForChat, setSelectedTeacherForChat] = useState(null);
+
+  // Admin action state
+  const [adminStats, setAdminStats] = useState({});
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminLessons, setAdminLessons] = useState([]);
+  const [adminPayments, setAdminPayments] = useState([]);
+  const [adminLogs, setAdminLogs] = useState([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminFilters, setAdminFilters] = useState({
+    users: { role: 'all', status: 'all', search: '' },
+    lessons: { status: 'all' },
+    payments: { teacherId: '', fromDate: '', toDate: '' }
+  });
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [banForm, setBanForm] = useState({ reason: '', isBanned: false });
+  const [salaryReport, setSalaryReport] = useState([]);
+  const [overallTotals, setOverallTotals] = useState({});
+  const [editingRate, setEditingRate] = useState(null);
+  const [newRate, setNewRate] = useState('');
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -191,8 +213,12 @@ const Dashboard = () => {
           setHistoryLoading(true);
           const historyData = await roleAPI.getParentHistory();
           setParentHistory(historyData.lessons || []);
+          
+          // Load all available teachers by default
+          const teachersData = await roleAPI.getAllTeachers();
+          setTeacherList(teachersData.teachers || []);
         } catch (error) {
-          console.error('Error loading parent history:', error);
+          console.error('Error loading parent data:', error);
         } finally {
           setHistoryLoading(false);
         }
@@ -204,6 +230,24 @@ const Dashboard = () => {
 
   useEffect(() => {
     loadChildren();
+  }, [user]);
+
+  // Auto-load data for admins
+  useEffect(() => {
+    const loadAdminData = async () => {
+      if (user && user.role === 'Admin') {
+        try {
+          setAdminLoading(true);
+          await loadAdminStats();
+        } catch (error) {
+          console.error('Error loading admin data:', error);
+        } finally {
+          setAdminLoading(false);
+        }
+      }
+    };
+
+    loadAdminData();
   }, [user]);
 
   const handleAction = async (fn) => {
@@ -288,9 +332,19 @@ const Dashboard = () => {
       clearTimeout(searchTimeout);
     }
     
-    // If query is empty, clear results
+    // If query is empty, load all teachers
     if (!query.trim()) {
-      setTeacherList([]);
+      setIsSearching(false); // Stop loading animation immediately
+      const timeout = setTimeout(async () => {
+        try {
+          const teachersData = await roleAPI.getAllTeachers();
+          setTeacherList(teachersData.teachers || []);
+        } catch (error) {
+          console.error('Error loading all teachers:', error);
+          setTeacherList([]);
+        }
+      }, 100); // Small delay to prevent too many API calls
+      setSearchTimeout(timeout);
       return;
     }
     
@@ -450,6 +504,135 @@ const Dashboard = () => {
 
   const goToCurrentWeek = () => {
     setWeekOffset(0);
+  };
+
+  // Admin functions
+  const loadAdminStats = async () => {
+    try {
+      const data = await adminAPI.getDashboardStats();
+      setAdminStats(data.stats || {});
+    } catch (error) {
+      console.error('Error loading admin stats:', error);
+      showError('Failed to load admin statistics');
+    }
+  };
+
+  const loadAdminUsers = async () => {
+    try {
+      setAdminLoading(true);
+      const data = await adminAPI.getAllUsers(adminFilters.users);
+      setAdminUsers(data.users || []);
+    } catch (error) {
+      console.error('Error loading admin users:', error);
+      showError('Failed to load users');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const loadAdminLessons = async () => {
+    try {
+      setAdminLoading(true);
+      const data = await adminAPI.getAllLessons(adminFilters.lessons);
+      setAdminLessons(data.lessons || []);
+    } catch (error) {
+      console.error('Error loading admin lessons:', error);
+      showError('Failed to load lessons');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const loadAdminPayments = async () => {
+    try {
+      setAdminLoading(true);
+      const data = await adminAPI.getTeacherPayments(adminFilters.payments);
+      setAdminPayments(data);
+    } catch (error) {
+      console.error('Error loading admin payments:', error);
+      showError('Failed to load payment data');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const loadAdminLogs = async () => {
+    try {
+      setAdminLoading(true);
+      const data = await adminAPI.getAdminLogs();
+      setAdminLogs(data.logs || []);
+    } catch (error) {
+      console.error('Error loading admin logs:', error);
+      showError('Failed to load activity logs');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleBanUser = async (userId, isBanned, reason = '') => {
+    try {
+      await adminAPI.updateUserBanStatus(userId, { isBanned, reason });
+      showSuccess(`User ${isBanned ? 'banned' : 'unbanned'} successfully`);
+      loadAdminUsers(); // Refresh the users list
+      // Also refresh logs if they're loaded
+      if (adminLogs.length > 0) {
+        loadAdminLogs();
+      }
+    } catch (error) {
+      console.error('Error updating user ban status:', error);
+      showError('Failed to update user status');
+    }
+  };
+
+  const handleDeleteLesson = async (lessonId, reason = '') => {
+    if (!confirm('Are you sure you want to delete this lesson? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      await adminAPI.deleteLesson(lessonId, reason);
+      showSuccess('Lesson deleted successfully');
+      loadAdminLessons(); // Refresh the lessons list
+      // Also refresh logs if they're loaded
+      if (adminLogs.length > 0) {
+        loadAdminLogs();
+      }
+    } catch (error) {
+      console.error('Error deleting lesson:', error);
+      showError('Failed to delete lesson');
+    }
+  };
+
+  const loadSalaryReport = async () => {
+    try {
+      setAdminLoading(true);
+      const data = await adminAPI.getTeacherSalaryReport(adminFilters.payments);
+      setSalaryReport(data.salaryReport || []);
+      setOverallTotals(data.overallTotals || {});
+    } catch (error) {
+      console.error('Error loading salary report:', error);
+      showError('Failed to load salary report');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleUpdateTeacherRate = async (teacherId, hourlyRate) => {
+    try {
+      await adminAPI.updateTeacherRate(teacherId, hourlyRate);
+      showSuccess('Teacher hourly rate updated successfully');
+      loadAdminUsers(); // Refresh users to show new rate
+      loadSalaryReport(); // Refresh salary report
+      // Also refresh logs
+      if (adminLogs.length > 0) {
+        loadAdminLogs();
+      }
+      setEditingRate(null);
+      setNewRate('');
+    } catch (error) {
+      console.error('Error updating teacher rate:', error);
+      showError('Failed to update teacher rate');
+    }
   };
 
 
@@ -755,6 +938,8 @@ const Dashboard = () => {
           <div className="dashboard-actions">
             <h3>Actions</h3>
             <Tabs
+              activeKey={activeTab}
+              onTabChange={setActiveTab}
               tabs={[
                 { key: 'children', title: 'My Children', content: (
                   <div className="grid-one">
@@ -890,6 +1075,28 @@ const Dashboard = () => {
                             placeholder="Search teachers by name, email, or subject..." 
                           />
                           {isSearching && <div className="search-loading"></div>}
+                          {searchQuery && (
+                            <button 
+                              className="clear-search-btn"
+                              onClick={async () => {
+                                setSearchQuery('');
+                                setIsSearching(false); // Stop loading animation
+                                // Clear existing timeout if any
+                                if (searchTimeout) {
+                                  clearTimeout(searchTimeout);
+                                }
+                                try {
+                                  const teachersData = await roleAPI.getAllTeachers();
+                                  setTeacherList(teachersData.teachers || []);
+                                } catch (error) {
+                                  console.error('Error reloading teachers:', error);
+                                  showError('Failed to load teachers');
+                                }
+                              }}
+                            >
+                              ×
+                            </button>
+                          )}
                       </div>
                         
 
@@ -913,7 +1120,7 @@ const Dashboard = () => {
                             <div className="results-header">
                               <span className="results-count">
                                 <GraduationCap className="icon" />
-                                {teacherList.length} teacher{teacherList.length !== 1 ? 's' : ''} found
+                                {teacherList.length} teacher{teacherList.length !== 1 ? 's' : ''} {searchQuery ? 'found' : 'available'}
                               </span>
                             </div>
                             <div className="teacher-cards">
@@ -935,6 +1142,16 @@ const Dashboard = () => {
                           </div>
                         ))}
                             </div>
+                          </div>
+                        )}
+                        
+                        {!isSearching && teacherList.length === 0 && !searchQuery && (
+                          <div className="no-teachers">
+                            <div className="no-teachers-icon">
+                              <GraduationCap className="icon" />
+                            </div>
+                            <p>No teachers available at the moment</p>
+                            <p className="no-teachers-suggestion">Please try again later or contact support</p>
                           </div>
                         )}
                       </div>
@@ -1094,9 +1311,7 @@ const Dashboard = () => {
                               <button 
                                 className="auth-button secondary"
                                 onClick={() => {
-                                  // This would switch to the children tab
-                                  // For now, just show a message
-                                  showError('Please go to "My Children" tab to select a child first');
+                                  setActiveTab('children');
                                 }}
                               >
                                 Go to My Children
@@ -1296,6 +1511,699 @@ const Dashboard = () => {
                         <p className="muted">Your lesson history will appear here once you start booking lessons.</p>
                       </div>
                     )}
+                  </div>
+                ) }
+              ]}
+            />
+          </div>
+        );
+      case 'Admin':
+        return (
+          <div className="dashboard-actions">
+            <h3>Admin Panel</h3>
+            <Tabs
+              activeKey={activeTab}
+              onTabChange={setActiveTab}
+              tabs={[
+                { key: 'overview', title: 'Overview', content: (
+                  <div className="grid-one">
+                    <p className="muted">System overview and statistics for platform management.</p>
+                    
+                    <div className="section">
+                      <h4 className="section-title">
+                        <Target className="icon" />
+                        System Statistics
+                      </h4>
+                      <div className="stats-grid">
+                        <div className="stat-card">
+                          <div className="stat-icon"><Users className="icon" /></div>
+                          <div className="stat-content">
+                            <div className="stat-value">{adminStats.totalUsers || 0}</div>
+                            <div className="stat-label">Total Users</div>
+                          </div>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-icon"><BookOpen className="icon" /></div>
+                          <div className="stat-content">
+                            <div className="stat-value">{adminStats.totalLessons || 0}</div>
+                            <div className="stat-label">Total Lessons</div>
+                          </div>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-icon"><GraduationCap className="icon" /></div>
+                          <div className="stat-content">
+                            <div className="stat-value">{adminStats.usersByRole?.teachers || 0}</div>
+                            <div className="stat-label">Teachers</div>
+                          </div>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-icon"><Clock className="icon" /></div>
+                          <div className="stat-content">
+                            <div className="stat-value">{adminStats.totalTeacherHours?.toFixed(1) || 0}</div>
+                            <div className="stat-label">Total Hours</div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {adminStats.usersByRole && (
+                        <div className="section" style={{ marginTop: '32px' }}>
+                          <h4 className="section-title">User Breakdown</h4>
+                          <div className="stats-grid">
+                            <div className="stat-card">
+                              <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
+                                <Users className="icon" />
+                              </div>
+                              <div className="stat-content">
+                                <div className="stat-value">{adminStats.usersByRole.parents || 0}</div>
+                                <div className="stat-label">Parents</div>
+                              </div>
+                            </div>
+                            <div className="stat-card">
+                              <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
+                                <User className="icon" />
+                              </div>
+                              <div className="stat-content">
+                                <div className="stat-value">{adminStats.usersByRole.students || 0}</div>
+                                <div className="stat-label">Students</div>
+                              </div>
+                            </div>
+                            <div className="stat-card">
+                              <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+                                <GraduationCap className="icon" />
+                              </div>
+                              <div className="stat-content">
+                                <div className="stat-value">{adminStats.usersByRole.teachers || 0}</div>
+                                <div className="stat-label">Teachers</div>
+                              </div>
+                            </div>
+                            <div className="stat-card">
+                              <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)' }}>
+                                <UserCheck className="icon" />
+                              </div>
+                              <div className="stat-content">
+                                <div className="stat-value">{adminStats.usersByRole.admins || 0}</div>
+                                <div className="stat-label">Admins</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) },
+                { key: 'users', title: 'Manage Users', content: (
+                  <div className="grid-one">
+                    <p className="muted">View, search, and manage all users in the system. Ban or unban users as needed.</p>
+                    
+                    <div className="section">
+                      <div className="section-header">
+                        <h4 className="section-title">
+                          <Users className="icon" />
+                          User Management
+                        </h4>
+                        <div className="admin-filters">
+                          <select 
+                            className="form-input"
+                            value={adminFilters.users.role}
+                            onChange={(e) => {
+                              setAdminFilters(prev => ({
+                                ...prev,
+                                users: { ...prev.users, role: e.target.value }
+                              }));
+                            }}
+                          >
+                            <option value="all">All Roles</option>
+                            <option value="Parent">Parents</option>
+                            <option value="Student">Students</option>
+                            <option value="Teacher">Teachers</option>
+                            <option value="Admin">Admin</option>
+                          </select>
+                          <select 
+                            className="form-input"
+                            value={adminFilters.users.status}
+                            onChange={(e) => {
+                              setAdminFilters(prev => ({
+                                ...prev,
+                                users: { ...prev.users, status: e.target.value }
+                              }));
+                            }}
+                          >
+                            <option value="all">All Status</option>
+                            <option value="active">Active</option>
+                            <option value="banned">Banned</option>
+                          </select>
+                          <input 
+                            type="text" 
+                            className="form-input" 
+                            placeholder="Search users..."
+                            value={adminFilters.users.search}
+                            onChange={(e) => {
+                              setAdminFilters(prev => ({
+                                ...prev,
+                                users: { ...prev.users, search: e.target.value }
+                              }));
+                            }}
+                          />
+                          <button className="auth-button primary" onClick={loadAdminUsers}>
+                            <Search className="icon" />
+                            Search
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="admin-table-container">
+                        {adminLoading ? (
+                          <div className="loading-container">
+                            <div className="loading-spinner"></div>
+                            <p>Loading users...</p>
+                          </div>
+                        ) : adminUsers.length > 0 ? (
+                          <table className="admin-table">
+                            <thead>
+                              <tr>
+                                <th>User</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Hourly Rate</th>
+                                <th>Status</th>
+                                <th>Joined</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {adminUsers.map(user => (
+                                <tr key={user._id}>
+                                  <td>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                      <div className="child-avatar" style={{ width: '32px', height: '32px', fontSize: '0.8rem' }}>
+                                        {user.firstName.charAt(0)}{user.lastName.charAt(0)}
+                                      </div>
+                                      <div>
+                                        <div style={{ fontWeight: '500', color: 'var(--text-primary)' }}>
+                                          {user.firstName} {user.lastName}
+                                        </div>
+                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                          ID: {user._id.slice(-8)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td>{user.email}</td>
+                                  <td>
+                                    <span className={`role-badge ${user.role.toLowerCase()}`}>
+                                      {user.role}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    {user.role === 'Teacher' ? (
+                                      editingRate === user._id ? (
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                          <input
+                                            type="number"
+                                            className="form-input"
+                                            style={{ width: '80px', padding: '4px 8px', fontSize: '0.85rem' }}
+                                            value={newRate}
+                                            onChange={(e) => setNewRate(e.target.value)}
+                                            placeholder="Rate"
+                                            min="1"
+                                            step="0.5"
+                                          />
+                                          <button
+                                            className="admin-action-btn unban"
+                                            style={{ padding: '4px 8px', fontSize: '0.7rem' }}
+                                            onClick={() => handleUpdateTeacherRate(user._id, parseFloat(newRate))}
+                                          >
+                                            Save
+                                          </button>
+                                          <button
+                                            className="admin-action-btn ban"
+                                            style={{ padding: '4px 8px', fontSize: '0.7rem' }}
+                                            onClick={() => {
+                                              setEditingRate(null);
+                                              setNewRate('');
+                                            }}
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                          <span className="payment-amount">${user.hourlyRate || 25}/hr</span>
+                                          <button
+                                            className="admin-action-btn"
+                                            style={{ padding: '2px 6px', fontSize: '0.7rem' }}
+                                            onClick={() => {
+                                              setEditingRate(user._id);
+                                              setNewRate((user.hourlyRate || 25).toString());
+                                            }}
+                                          >
+                                            <Edit3 className="icon" />
+                                            Edit
+                                          </button>
+                                        </div>
+                                      )
+                                    ) : (
+                                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>N/A</span>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <span className={`user-status-badge ${user.isActive ? 'active' : 'banned'}`}>
+                                      <CheckCircle className="icon" />
+                                      {user.isActive ? 'Active' : 'Banned'}
+                                    </span>
+                                  </td>
+                                  <td>{new Date(user.createdAt).toLocaleDateString()}</td>
+                                  <td>
+                                    <div className="admin-action-buttons">
+                                      {user.role !== 'Admin' && (
+                                        <button 
+                                          className={`admin-action-btn ${user.isActive ? 'ban' : 'unban'}`}
+                                          onClick={() => {
+                                            const reason = user.isActive 
+                                              ? prompt('Please provide a reason for banning this user:')
+                                              : prompt('Please provide a reason for unbanning this user:');
+                                            if (reason !== null) { // null means user cancelled
+                                              handleBanUser(user._id, user.isActive, reason);
+                                            }
+                                          }}
+                                        >
+                                          <AlertTriangle className="icon" />
+                                          {user.isActive ? 'Ban' : 'Unban'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <div className="admin-empty">
+                            <Users className="icon" />
+                            <h4>No users found</h4>
+                            <p>Try adjusting your search filters</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) },
+                { key: 'lessons', title: 'Manage Lessons', content: (
+                  <div className="grid-one">
+                    <p className="muted">View all lessons, filter by status, and manage bookings across the platform.</p>
+                    
+                    <div className="section">
+                      <div className="section-header">
+                        <h4 className="section-title">
+                          <BookOpen className="icon" />
+                          Lesson Management
+                        </h4>
+                        <div className="admin-filters">
+                          <select 
+                            className="form-input"
+                            value={adminFilters.lessons.status}
+                            onChange={(e) => {
+                              setAdminFilters(prev => ({
+                                ...prev,
+                                lessons: { ...prev.lessons, status: e.target.value }
+                              }));
+                            }}
+                          >
+                            <option value="all">All Status</option>
+                            <option value="booked">Booked</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                          <button className="auth-button primary" onClick={loadAdminLessons}>
+                            <Search className="icon" />
+                            Load Lessons
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="admin-table-container">
+                        {adminLoading ? (
+                          <div className="loading-container">
+                            <div className="loading-spinner"></div>
+                            <p>Loading lessons...</p>
+                          </div>
+                        ) : adminLessons.length > 0 ? (
+                          <table className="admin-table">
+                            <thead>
+                              <tr>
+                                <th>Date & Time</th>
+                                <th>Teacher</th>
+                                <th>Student</th>
+                                <th>Subject</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {adminLessons.map(lesson => (
+                                <tr key={lesson._id}>
+                                  <td>
+                                    <div>{new Date(lesson.dateTime).toLocaleDateString()}</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                      {new Date(lesson.dateTime).toLocaleTimeString()}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    {lesson.teacher ? (
+                                      <div>
+                                        <div style={{ fontWeight: '500' }}>
+                                          {lesson.teacher.firstName} {lesson.teacher.lastName}
+                                        </div>
+                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                          {lesson.teacher.email}
+                                        </div>
+                                      </div>
+                                    ) : 'Unknown Teacher'}
+                                  </td>
+                                  <td>
+                                    <div>{lesson.studentEmail}</div>
+                                    {lesson.studentName && (
+                                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                        {lesson.studentName}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td>{lesson.subject || 'General'}</td>
+                                  <td>{lesson.durationMinutes || 60} min</td>
+                                  <td>
+                                    <span className={`lesson-status-badge ${lesson.status}`}>
+                                      {lesson.status === 'completed' && <CheckCircle className="icon" style={{ width: '12px', height: '12px', margin: 0 }} />}
+                                      {lesson.status === 'in_progress' && <RotateCcw className="icon" style={{ width: '12px', height: '12px', margin: 0 }} />}
+                                      {lesson.status === 'booked' && <Calendar className="icon" style={{ width: '12px', height: '12px', margin: 0 }} />}
+                                      {lesson.status || 'Unknown'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div className="admin-action-buttons">
+                                      <button 
+                                        className="admin-action-btn delete"
+                                        onClick={() => handleDeleteLesson(lesson._id, 'Admin deletion')}
+                                      >
+                                        <Trash2 className="icon" />
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <div className="admin-empty">
+                            <BookOpen className="icon" />
+                            <h4>No lessons found</h4>
+                            <p>Try adjusting your search filters or load lessons</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) },
+                { key: 'payments', title: 'Teacher Salaries', content: (
+                  <div className="grid-one">
+                    <p className="muted">Comprehensive teacher salary management with individual hourly rates and detailed work tracking.</p>
+                    
+                    <div className="section">
+                      <div className="section-header">
+                        <h4 className="section-title">
+                          <Target className="icon" />
+                          Salary Report
+                        </h4>
+                        <div className="admin-filters">
+                          <input 
+                            type="date" 
+                            className="form-input" 
+                            placeholder="From Date"
+                            value={adminFilters.payments.fromDate}
+                            onChange={(e) => {
+                              setAdminFilters(prev => ({
+                                ...prev,
+                                payments: { ...prev.payments, fromDate: e.target.value }
+                              }));
+                            }}
+                          />
+                          <input 
+                            type="date" 
+                            className="form-input" 
+                            placeholder="To Date"
+                            value={adminFilters.payments.toDate}
+                            onChange={(e) => {
+                              setAdminFilters(prev => ({
+                                ...prev,
+                                payments: { ...prev.payments, toDate: e.target.value }
+                              }));
+                            }}
+                          />
+                          <select 
+                            className="form-input"
+                            value={adminFilters.payments.teacherId}
+                            onChange={(e) => {
+                              setAdminFilters(prev => ({
+                                ...prev,
+                                payments: { ...prev.payments, teacherId: e.target.value }
+                              }));
+                            }}
+                          >
+                            <option value="">All Teachers</option>
+                            {adminUsers.filter(u => u.role === 'Teacher').map(teacher => (
+                              <option key={teacher._id} value={teacher._id}>
+                                {teacher.firstName} {teacher.lastName}
+                              </option>
+                            ))}
+                          </select>
+                          <button className="auth-button primary" onClick={loadSalaryReport}>
+                            <Search className="icon" />
+                            Generate Report
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {overallTotals.totalTeachers > 0 && (
+                        <div className="section" style={{ padding: '20px', background: 'var(--bg-tertiary)', marginTop: '20px', borderRadius: '12px' }}>
+                          <h5 style={{ marginBottom: '16px', color: 'var(--text-primary)' }}>
+                            <FileText className="icon" />
+                            Overall Summary
+                          </h5>
+                          <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
+                            <div className="stat-card" style={{ padding: '16px', background: 'var(--bg-secondary)' }}>
+                              <div className="stat-content">
+                                <div className="stat-value" style={{ fontSize: '1.5rem' }}>{overallTotals.totalTeachers}</div>
+                                <div className="stat-label">Active Teachers</div>
+                              </div>
+                            </div>
+                            <div className="stat-card" style={{ padding: '16px', background: 'var(--bg-secondary)' }}>
+                              <div className="stat-content">
+                                <div className="stat-value" style={{ fontSize: '1.5rem' }}>{overallTotals.totalHours.toFixed(1)}</div>
+                                <div className="stat-label">Total Hours</div>
+                              </div>
+                            </div>
+                            <div className="stat-card" style={{ padding: '16px', background: 'var(--bg-secondary)' }}>
+                              <div className="stat-content">
+                                <div className="stat-value" style={{ fontSize: '1.5rem', color: 'var(--accent-primary)' }}>
+                                  ${overallTotals.totalSalary.toFixed(2)}
+                                </div>
+                                <div className="stat-label">Total Salary</div>
+                              </div>
+                            </div>
+                            <div className="stat-card" style={{ padding: '16px', background: 'var(--bg-secondary)' }}>
+                              <div className="stat-content">
+                                <div className="stat-value" style={{ fontSize: '1.5rem' }}>{overallTotals.totalEntries}</div>
+                                <div className="stat-label">Total Entries</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="admin-table-container" style={{ marginTop: '20px' }}>
+                        {adminLoading ? (
+                          <div className="loading-container">
+                            <div className="loading-spinner"></div>
+                            <p>Generating salary report...</p>
+                          </div>
+                        ) : salaryReport.length > 0 ? (
+                          <div>
+                            {salaryReport.map(report => (
+                              <div key={report.teacher._id} className="salary-teacher-section" style={{ 
+                                marginBottom: '32px', 
+                                background: 'var(--bg-secondary)', 
+                                borderRadius: '12px', 
+                                overflow: 'hidden',
+                                border: '1px solid var(--border-light)'
+                              }}>
+                                <div style={{ 
+                                  padding: '20px', 
+                                  background: 'var(--bg-tertiary)', 
+                                  borderBottom: '1px solid var(--border-light)' 
+                                }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                      <h5 style={{ margin: '0 0 8px 0', color: 'var(--text-primary)' }}>
+                                        {report.teacher.firstName} {report.teacher.lastName}
+                                      </h5>
+                                      <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                                        {report.teacher.email}
+                                      </div>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                      <div style={{ fontSize: '1.8rem', fontWeight: '700', color: 'var(--accent-primary)' }}>
+                                        ${report.totalSalary.toFixed(2)}
+                                      </div>
+                                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                        ${report.teacher.hourlyRate}/hr × {report.totalHours.toFixed(1)} hrs
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '16px', marginTop: '16px' }}>
+                                    <div>
+                                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Total Hours</div>
+                                      <div style={{ fontSize: '1.2rem', fontWeight: '600' }}>{report.totalHours.toFixed(1)}</div>
+                                    </div>
+                                    <div>
+                                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Work Sessions</div>
+                                      <div style={{ fontSize: '1.2rem', fontWeight: '600' }}>{report.totalEntries}</div>
+                                    </div>
+                                    <div>
+                                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Avg Hours/Session</div>
+                                      <div style={{ fontSize: '1.2rem', fontWeight: '600' }}>{report.averageHoursPerEntry.toFixed(1)}</div>
+                                    </div>
+                                    <div>
+                                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Last Worked</div>
+                                      <div style={{ fontSize: '1.2rem', fontWeight: '600' }}>
+                                        {report.lastWorkedDate ? new Date(report.lastWorkedDate).toLocaleDateString() : 'N/A'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {report.entries.length > 0 && (
+                                  <div style={{ padding: '0' }}>
+                                    <table className="admin-table" style={{ margin: '0', borderRadius: '0' }}>
+                                      <thead>
+                                        <tr>
+                                          <th>Date</th>
+                                          <th>Hours</th>
+                                          <th>Rate</th>
+                                          <th>Salary</th>
+                                          <th>Status</th>
+                                          <th>Notes</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {report.entries.slice(0, 5).map(entry => (
+                                          <tr key={entry._id}>
+                                            <td>{new Date(entry.date).toLocaleDateString()}</td>
+                                            <td>{entry.hours.toFixed(1)} hrs</td>
+                                            <td>${entry.hourlyRate}/hr</td>
+                                            <td className="payment-amount">${entry.salary.toFixed(2)}</td>
+                                            <td>
+                                              <span className={`user-status-badge ${entry.paymentStatus === 'paid' ? 'active' : 'banned'}`}>
+                                                {entry.paymentStatus === 'paid' ? 'Paid' : 'Pending'}
+                                              </span>
+                                            </td>
+                                            <td style={{ maxWidth: '200px', fontSize: '0.85rem' }}>
+                                              {entry.notes || 'No notes'}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                    {report.entries.length > 5 && (
+                                      <div style={{ padding: '12px 20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                                        ... and {report.entries.length - 5} more entries
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="admin-empty">
+                            <Target className="icon" />
+                            <h4>No salary data found</h4>
+                            <p>Generate a salary report to see teacher payment information</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) },
+                { key: 'logs', title: 'Activity Logs', content: (
+                  <div className="grid-one">
+                    <p className="muted">View admin activity logs and system audit trail.</p>
+                    
+                    <div className="section">
+                      <h4 className="section-title">
+                        <FileText className="icon" />
+                        Admin Activity Logs
+                      </h4>
+                      
+                      <div style={{ marginBottom: '20px' }}>
+                        <button className="auth-button primary" onClick={loadAdminLogs}>
+                          <FileText className="icon" />
+                          Load Activity Logs
+                        </button>
+                      </div>
+                      
+                      <div className="admin-table-container">
+                        {adminLoading ? (
+                          <div className="loading-container">
+                            <div className="loading-spinner"></div>
+                            <p>Loading activity logs...</p>
+                          </div>
+                        ) : adminLogs.length > 0 ? (
+                          <table className="admin-table">
+                            <thead>
+                              <tr>
+                                <th>Timestamp</th>
+                                <th>Admin</th>
+                                <th>Action</th>
+                                <th>Reason</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {adminLogs.map(log => (
+                                <tr key={log._id}>
+                                  <td>
+                                    <div>{new Date(log.timestamp).toLocaleDateString()}</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                      {new Date(log.timestamp).toLocaleTimeString()}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div>{log.admin.firstName} {log.admin.lastName}</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                      {log.admin.email}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <span className={`lesson-status-badge ${log.action.toLowerCase().includes('delete') ? 'cancelled' : 'completed'}`}>
+                                      {log.action.replace('_', ' ')}
+                                    </span>
+                                  </td>
+                                  <td>{log.reason || 'No reason provided'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <div className="admin-empty">
+                            <FileText className="icon" />
+                            <h4>No activity logs found</h4>
+                            <p>Load activity logs to see admin actions</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ) }
               ]}
@@ -1870,6 +2778,11 @@ const Dashboard = () => {
         )}
       </Modal>
 
+      {/* AI Chat Modal */}
+      <Modal isOpen={openModal === 'ai-chat'} title="AI Tutor Chat" onClose={() => setOpenModal(null)} isFullWidth={true}>
+        <AIChat user={user} />
+      </Modal>
+
     </>
   );
 
@@ -1897,6 +2810,7 @@ const Dashboard = () => {
           notifications={notifications} 
           onMarkAllRead={handleMarkAllRead} 
           onMessages={user?.role !== 'Parent' ? handleMessages : null} 
+          onAIChat={() => setOpenModal('ai-chat')}
           currentView="profile" 
         />
         <Profile user={user} onUpdateUser={handleUpdateUser} onDeleteAccount={handleDeleteAccount} />
@@ -1923,6 +2837,7 @@ const Dashboard = () => {
         notifications={notifications} 
         onMarkAllRead={handleMarkAllRead} 
         onMessages={user?.role !== 'Parent' ? handleMessages : null} 
+        onAIChat={() => setOpenModal('ai-chat')}
         currentView="dashboard" 
       />
       

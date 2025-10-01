@@ -78,6 +78,8 @@
 
 .password-input {
   padding-right: 45px;
+  width: 100%;
+
 }
 
 .password-toggle {

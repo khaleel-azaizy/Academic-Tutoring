@@ -7,6 +7,7 @@ const bcrypt = require('bcrypt');
 const cookieParser = require('cookie-parser');
 const { ObjectId } = require('mongodb');
 const e = require('express');
+const aiTutorService = require('./services/aiTutorService');
 
 const app = express()
 app.use(express.json())
@@ -37,7 +38,7 @@ app.post('/api/register', async (req, res) => {
     }
 
     // Validate role
-    const validRoles = ['Parent', 'Student', 'Teacher'];
+    const validRoles = ['Parent', 'Student', 'Teacher', 'Admin'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ error: 'Invalid user type' });
     }
@@ -497,6 +498,20 @@ app.get('/api/teacher/schedule', authenticateToken, authorizeRole('Teacher'), as
 // =========================
 // Parent Actions Endpoints
 // =========================
+
+// Get all teachers
+app.get('/api/teachers', authenticateToken, async (req, res) => {
+  try {
+    const teachers = await db.collection('users').find(
+      { role: 'Teacher' },
+      { projection: { password: 0 } }
+    ).limit(100).toArray();
+    return res.json({ teachers });
+  } catch (error) {
+    console.error('Get all teachers error:', error);
+    return res.status(500).json({ error: 'Failed to get teachers' });
+  }
+});
 
 // Search teachers
 app.get('/api/teachers/search', authenticateToken, async (req, res) => {
@@ -1743,6 +1758,811 @@ app.post('/api/admin/cleanup-orphaned-data', authenticateToken, async (req, res)
   } catch (error) {
     console.error('Orphaned data cleanup error:', error);
     return res.status(500).json({ error: 'Failed to cleanup orphaned data' });
+  }
+});
+
+// ==================== AI TUTOR ROUTES ====================
+
+// AI Chat Route - Main tutoring assistance
+app.post('/api/ai/chat', authenticateToken, async (req, res) => {
+  try {
+    const { message, subject, conversationHistory } = req.body;
+    const user = req.user;
+
+    // Validate input
+    if (!message || message.trim().length === 0) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    if (!aiTutorService.isConfigured()) {
+      return res.status(503).json({ error: 'AI service is not configured. Please contact administrator.' });
+    }
+
+    // Get AI response
+    const result = await aiTutorService.getChatResponse(
+      message,
+      subject || 'general',
+      user.grade,
+      conversationHistory || []
+    );
+
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+
+    // Log AI usage for analytics
+    try {
+      await db.collection('ai_usage').insertOne({
+        userId: user._id,
+        userRole: user.role,
+        subject: subject || 'general',
+        question: message,
+        tokensUsed: result.tokensUsed,
+        model: result.model,
+        timestamp: new Date()
+      });
+    } catch (logError) {
+      console.warn('Failed to log AI usage:', logError);
+    }
+
+    res.json({
+      success: true,
+      response: result.response,
+      subject: result.subject,
+      tokensUsed: result.tokensUsed
+    });
+
+  } catch (error) {
+    console.error('AI Chat error:', error);
+    res.status(500).json({ error: 'Failed to process AI request' });
+  }
+});
+
+// Generate Study Plan Route
+app.post('/api/ai/study-plan', authenticateToken, async (req, res) => {
+  try {
+    const { subjects, weakAreas, timeAvailable } = req.body;
+    const user = req.user;
+
+    if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
+      return res.status(400).json({ error: 'At least one subject is required' });
+    }
+
+    if (!aiTutorService.isConfigured()) {
+      return res.status(503).json({ error: 'AI service is not configured. Please contact administrator.' });
+    }
+
+    const result = await aiTutorService.generateStudyPlan(
+      user.grade || 'General',
+      subjects,
+      weakAreas || [],
+      timeAvailable || '1 hour'
+    );
+
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+
+    // Save study plan to user's profile
+    try {
+      await db.collection('study_plans').insertOne({
+        userId: user._id,
+        grade: user.grade,
+        subjects: subjects,
+        weakAreas: weakAreas || [],
+        timeAvailable: timeAvailable || '1 hour',
+        studyPlan: result.studyPlan,
+        tokensUsed: result.tokensUsed,
+        createdAt: new Date()
+      });
+    } catch (saveError) {
+      console.warn('Failed to save study plan:', saveError);
+    }
+
+    res.json({
+      success: true,
+      studyPlan: result.studyPlan,
+      tokensUsed: result.tokensUsed
+    });
+
+  } catch (error) {
+    console.error('Study Plan generation error:', error);
+    res.status(500).json({ error: 'Failed to generate study plan' });
+  }
+});
+
+// Generate Quiz Route
+app.post('/api/ai/quiz', authenticateToken, async (req, res) => {
+  try {
+    const { subject, topic, questionCount } = req.body;
+    const user = req.user;
+
+    if (!subject || !topic) {
+      return res.status(400).json({ error: 'Subject and topic are required' });
+    }
+
+    if (!aiTutorService.isConfigured()) {
+      return res.status(503).json({ error: 'AI service is not configured. Please contact administrator.' });
+    }
+
+    const result = await aiTutorService.generateQuiz(
+      subject,
+      topic,
+      user.grade || 'General',
+      questionCount || 5
+    );
+
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+
+    // Save quiz for later reference
+    try {
+      await db.collection('generated_quizzes').insertOne({
+        userId: user._id,
+        grade: user.grade,
+        subject: subject,
+        topic: topic,
+        quiz: result.quiz,
+        questionCount: questionCount || 5,
+        tokensUsed: result.tokensUsed,
+        createdAt: new Date()
+      });
+    } catch (saveError) {
+      console.warn('Failed to save quiz:', saveError);
+    }
+
+    res.json({
+      success: true,
+      quiz: result.quiz,
+      subject: result.subject,
+      topic: result.topic,
+      tokensUsed: result.tokensUsed
+    });
+
+  } catch (error) {
+    console.error('Quiz generation error:', error);
+    res.status(500).json({ error: 'Failed to generate quiz' });
+  }
+});
+
+// Explain Concept Route
+app.post('/api/ai/explain', authenticateToken, async (req, res) => {
+  try {
+    const { concept, subject } = req.body;
+    const user = req.user;
+
+    if (!concept || !subject) {
+      return res.status(400).json({ error: 'Concept and subject are required' });
+    }
+
+    if (!aiTutorService.isConfigured()) {
+      return res.status(503).json({ error: 'AI service is not configured. Please contact administrator.' });
+    }
+
+    const result = await aiTutorService.explainConcept(
+      concept,
+      subject,
+      user.grade || 'General'
+    );
+
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+
+    // Log concept explanation for analytics
+    try {
+      await db.collection('concept_explanations').insertOne({
+        userId: user._id,
+        grade: user.grade,
+        concept: concept,
+        subject: subject,
+        explanation: result.explanation,
+        tokensUsed: result.tokensUsed,
+        createdAt: new Date()
+      });
+    } catch (saveError) {
+      console.warn('Failed to save concept explanation:', saveError);
+    }
+
+    res.json({
+      success: true,
+      explanation: result.explanation,
+      concept: result.concept,
+      subject: result.subject,
+      tokensUsed: result.tokensUsed
+    });
+
+  } catch (error) {
+    console.error('Concept explanation error:', error);
+    res.status(500).json({ error: 'Failed to explain concept' });
+  }
+});
+
+// Get Available AI Subjects
+app.get('/api/ai/subjects', authenticateToken, (req, res) => {
+  try {
+    const subjects = aiTutorService.getAvailableSubjects();
+    res.json({
+      success: true,
+      subjects: subjects
+    });
+  } catch (error) {
+    console.error('Get subjects error:', error);
+    res.status(500).json({ error: 'Failed to get available subjects' });
+  }
+});
+
+// AI Service Status
+app.get('/api/ai/status', authenticateToken, (req, res) => {
+  try {
+    const isConfigured = aiTutorService.isConfigured();
+    res.json({
+      success: true,
+      configured: isConfigured,
+      availableFeatures: [
+        'chat',
+        'study-plan',
+        'quiz',
+        'explain'
+      ]
+    });
+  } catch (error) {
+    console.error('AI status error:', error);
+    res.status(500).json({ error: 'Failed to get AI service status' });
+  }
+});
+
+// Get User's AI Usage History
+app.get('/api/ai/history', authenticateToken, async (req, res) => {
+  try {
+    const user = req.user;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = parseInt(req.query.offset) || 0;
+
+    const history = await db.collection('ai_usage')
+      .find({ userId: user._id })
+      .sort({ timestamp: -1 })
+      .skip(offset)
+      .limit(limit)
+      .toArray();
+
+    const totalUsage = await db.collection('ai_usage')
+      .countDocuments({ userId: user._id });
+
+    res.json({
+      success: true,
+      history: history,
+      totalQuestions: totalUsage,
+      hasMore: (offset + limit) < totalUsage
+    });
+
+  } catch (error) {
+    console.error('AI history error:', error);
+    res.status(500).json({ error: 'Failed to get AI usage history' });
+  }
+});
+
+// =========================
+// ADMIN ENDPOINTS
+// =========================
+
+// Admin Dashboard - Get all system statistics
+app.get('/api/admin/dashboard', authenticateToken, authorizeRole('Admin'), async (req, res) => {
+  try {
+    const users = await db.collection('users').find({}, { projection: { password: 0 } }).toArray();
+    const lessons = await db.collection('lessons').find({}).toArray();
+    const teacherHours = await db.collection('teacherHours').find({}).toArray();
+
+    const stats = {
+      totalUsers: users.length,
+      activeUsers: users.filter(u => u.isActive).length,
+      bannedUsers: users.filter(u => !u.isActive).length,
+      usersByRole: {
+        parents: users.filter(u => u.role === 'Parent').length,
+        students: users.filter(u => u.role === 'Student').length,
+        teachers: users.filter(u => u.role === 'Teacher').length,
+        admins: users.filter(u => u.role === 'Admin').length
+      },
+      totalLessons: lessons.length,
+      lessonsByStatus: {
+        booked: lessons.filter(l => l.status === 'booked').length,
+        inProgress: lessons.filter(l => l.status === 'in_progress').length,
+        completed: lessons.filter(l => l.status === 'completed').length,
+        cancelled: lessons.filter(l => l.status === 'cancelled').length
+      },
+      totalTeacherHours: teacherHours.reduce((sum, h) => sum + parseFloat(h.hours || 0), 0)
+    };
+
+    res.json({ stats, message: 'Admin dashboard data retrieved successfully' });
+  } catch (error) {
+    console.error('Admin dashboard error:', error);
+    res.status(500).json({ error: 'Failed to get admin dashboard data' });
+  }
+});
+
+// Get all users with detailed information
+app.get('/api/admin/users', authenticateToken, authorizeRole('Admin'), async (req, res) => {
+  try {
+    const { role, status, search } = req.query;
+    let query = {};
+    
+    if (role && role !== 'all') {
+      query.role = role;
+    }
+    
+    if (status === 'active') {
+      query.isActive = true;
+    } else if (status === 'banned') {
+      query.isActive = false;
+    }
+    
+    if (search) {
+      query.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const users = await db.collection('users').find(query, { 
+      projection: { password: 0 } 
+    }).sort({ createdAt: -1 }).toArray();
+
+    res.json({ users, message: 'Users retrieved successfully' });
+  } catch (error) {
+    console.error('Admin get users error:', error);
+    res.status(500).json({ error: 'Failed to get users' });
+  }
+});
+
+// Get all lessons with detailed information
+app.get('/api/admin/lessons', authenticateToken, authorizeRole('Admin'), async (req, res) => {
+  try {
+    const { status, teacherId, parentId, studentId } = req.query;
+    let query = {};
+    
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+    
+    if (teacherId) {
+      query.teacherId = new ObjectId(teacherId);
+    }
+    
+    if (parentId) {
+      query.parentId = new ObjectId(parentId);
+    }
+    
+    if (studentId) {
+      query.studentEmail = studentId; // Assuming studentId is email for this search
+    }
+
+    const lessons = await db.collection('lessons').aggregate([
+      { $match: query },
+      { $lookup: {
+          from: 'users',
+          localField: 'teacherId',
+          foreignField: '_id',
+          as: 'teacher',
+          pipeline: [{ $project: { firstName: 1, lastName: 1, email: 1 } }]
+      }},
+      { $lookup: {
+          from: 'users',
+          localField: 'parentId',
+          foreignField: '_id',
+          as: 'parent',
+          pipeline: [{ $project: { firstName: 1, lastName: 1, email: 1 } }]
+      }},
+      { $unwind: { path: '$teacher', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$parent', preserveNullAndEmptyArrays: true } },
+      { $sort: { dateTime: -1 } }
+    ]).toArray();
+
+    res.json({ lessons, message: 'Lessons retrieved successfully' });
+  } catch (error) {
+    console.error('Admin get lessons error:', error);
+    res.status(500).json({ error: 'Failed to get lessons' });
+  }
+});
+
+// Get all teacher payment information
+app.get('/api/admin/teacher-payments', authenticateToken, authorizeRole('Admin'), async (req, res) => {
+  try {
+    const { teacherId, fromDate, toDate } = req.query;
+    let query = {};
+    
+    if (teacherId) {
+      query.teacherId = new ObjectId(teacherId);
+    }
+    
+    if (fromDate || toDate) {
+      query.date = {};
+      if (fromDate) {
+        query.date.$gte = new Date(fromDate);
+      }
+      if (toDate) {
+        query.date.$lte = new Date(toDate);
+      }
+    }
+
+    const teacherHours = await db.collection('teacherHours').aggregate([
+      { $match: query },
+      { $lookup: {
+          from: 'users',
+          localField: 'teacherId',
+          foreignField: '_id',
+          as: 'teacher',
+          pipeline: [{ $project: { firstName: 1, lastName: 1, email: 1 } }]
+      }},
+      { $unwind: '$teacher' },
+      { $sort: { date: -1 } }
+    ]).toArray();
+
+    // Calculate payment summary by teacher with individual hourly rates
+    const paymentSummary = {};
+    teacherHours.forEach(entry => {
+      const teacherId = entry.teacherId.toString();
+      const hourlyRate = entry.teacher.hourlyRate || 25; // Use individual rate or default to $25
+      const hours = parseFloat(entry.hours || 0);
+      
+      if (!paymentSummary[teacherId]) {
+        paymentSummary[teacherId] = {
+          teacher: entry.teacher,
+          hourlyRate: hourlyRate,
+          totalHours: 0,
+          totalEntries: 0,
+          estimatedPayment: 0
+        };
+      }
+      paymentSummary[teacherId].totalHours += hours;
+      paymentSummary[teacherId].totalEntries += 1;
+      paymentSummary[teacherId].estimatedPayment += (hours * hourlyRate); // Calculate with individual rate
+    });
+
+    res.json({ 
+      teacherHours, 
+      paymentSummary: Object.values(paymentSummary),
+      message: 'Teacher payments retrieved successfully' 
+    });
+  } catch (error) {
+    console.error('Admin teacher payments error:', error);
+    res.status(500).json({ error: 'Failed to get teacher payments' });
+  }
+});
+
+// Ban/Unban user
+app.put('/api/admin/users/:userId/ban', authenticateToken, authorizeRole('Admin'), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { isBanned, reason } = req.body;
+
+    // Don't allow banning other admins
+    const targetUser = await db.collection('users').findOne({ _id: new ObjectId(userId) });
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (targetUser.role === 'Admin') {
+      return res.status(403).json({ error: 'Cannot ban admin users' });
+    }
+
+    const result = await db.collection('users').updateOne(
+      { _id: new ObjectId(userId) },
+      { 
+        $set: { 
+          isActive: !isBanned,
+          banReason: reason || null,
+          bannedAt: isBanned ? new Date() : null,
+          bannedBy: req.user._id
+        } 
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Log the ban/unban action for audit purposes
+    await db.collection('adminActions').insertOne({
+      action: isBanned ? 'BAN_USER' : 'UNBAN_USER',
+      adminId: req.user._id,
+      targetUserId: new ObjectId(userId),
+      userData: {
+        name: `${targetUser.firstName} ${targetUser.lastName}`,
+        email: targetUser.email,
+        role: targetUser.role
+      },
+      reason: reason || 'No reason provided',
+      timestamp: new Date()
+    });
+
+    res.json({ 
+      message: `User ${isBanned ? 'banned' : 'unbanned'} successfully`,
+      userId,
+      isBanned
+    });
+  } catch (error) {
+    console.error('Admin ban user error:', error);
+    res.status(500).json({ error: 'Failed to update user status' });
+  }
+});
+
+// Delete lesson (admin only)
+app.delete('/api/admin/lessons/:lessonId', authenticateToken, authorizeRole('Admin'), async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    const { reason } = req.body;
+
+    const lesson = await db.collection('lessons').findOne({ _id: new ObjectId(lessonId) });
+    if (!lesson) {
+      return res.status(404).json({ error: 'Lesson not found' });
+    }
+
+    // Log the deletion for audit purposes
+    await db.collection('adminActions').insertOne({
+      action: 'DELETE_LESSON',
+      adminId: req.user._id,
+      targetLessonId: new ObjectId(lessonId),
+      lessonData: lesson,
+      reason: reason || 'No reason provided',
+      timestamp: new Date()
+    });
+
+    const result = await db.collection('lessons').deleteOne({ _id: new ObjectId(lessonId) });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Lesson not found' });
+    }
+
+    res.json({ 
+      message: 'Lesson deleted successfully',
+      lessonId,
+      deletedBy: req.user.email
+    });
+  } catch (error) {
+    console.error('Admin delete lesson error:', error);
+    res.status(500).json({ error: 'Failed to delete lesson' });
+  }
+});
+
+// Update teacher payment status
+app.put('/api/admin/teacher-payments/:paymentId/status', authenticateToken, authorizeRole('Admin'), async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const { status, notes } = req.body; // status: 'pending', 'paid', 'disputed'
+
+    const result = await db.collection('teacherHours').updateOne(
+      { _id: new ObjectId(paymentId) },
+      { 
+        $set: { 
+          paymentStatus: status,
+          paymentNotes: notes || null,
+          paymentUpdatedAt: new Date(),
+          paymentUpdatedBy: req.user._id
+        } 
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'Payment record not found' });
+    }
+
+    res.json({ 
+      message: 'Payment status updated successfully',
+      paymentId,
+      status
+    });
+  } catch (error) {
+    console.error('Admin update payment error:', error);
+    res.status(500).json({ error: 'Failed to update payment status' });
+  }
+});
+
+// Get admin action logs
+app.get('/api/admin/logs', authenticateToken, authorizeRole('Admin'), async (req, res) => {
+  try {
+    const { limit = 50, skip = 0 } = req.query;
+
+    const logs = await db.collection('adminActions').aggregate([
+      { $lookup: {
+          from: 'users',
+          localField: 'adminId',
+          foreignField: '_id',
+          as: 'admin',
+          pipeline: [{ $project: { firstName: 1, lastName: 1, email: 1 } }]
+      }},
+      { $unwind: '$admin' },
+      { $sort: { timestamp: -1 } },
+      { $skip: parseInt(skip) },
+      { $limit: parseInt(limit) }
+    ]).toArray();
+
+    const totalLogs = await db.collection('adminActions').countDocuments();
+
+    res.json({ 
+      logs, 
+      totalLogs,
+      message: 'Admin logs retrieved successfully' 
+    });
+  } catch (error) {
+    console.error('Admin logs error:', error);
+    res.status(500).json({ error: 'Failed to get admin logs' });
+  }
+});
+
+// Update teacher hourly rate
+app.put('/api/admin/teachers/:teacherId/hourly-rate', authenticateToken, authorizeRole('Admin'), async (req, res) => {
+  try {
+    const { teacherId } = req.params;
+    const { hourlyRate } = req.body;
+
+    if (!hourlyRate || hourlyRate <= 0) {
+      return res.status(400).json({ error: 'Valid hourly rate is required' });
+    }
+
+    const teacher = await db.collection('users').findOne({ 
+      _id: new ObjectId(teacherId),
+      role: 'Teacher'
+    });
+
+    if (!teacher) {
+      return res.status(404).json({ error: 'Teacher not found' });
+    }
+
+    const result = await db.collection('users').updateOne(
+      { _id: new ObjectId(teacherId) },
+      { 
+        $set: { 
+          hourlyRate: parseFloat(hourlyRate),
+          hourlyRateUpdatedAt: new Date(),
+          hourlyRateUpdatedBy: req.user._id
+        } 
+      }
+    );
+
+    // Log the rate change for audit
+    await db.collection('adminActions').insertOne({
+      action: 'UPDATE_TEACHER_RATE',
+      adminId: req.user._id,
+      targetUserId: new ObjectId(teacherId),
+      userData: {
+        name: `${teacher.firstName} ${teacher.lastName}`,
+        email: teacher.email,
+        previousRate: teacher.hourlyRate || 25,
+        newRate: parseFloat(hourlyRate)
+      },
+      reason: `Hourly rate updated from $${teacher.hourlyRate || 25} to $${hourlyRate}`,
+      timestamp: new Date()
+    });
+
+    res.json({ 
+      message: 'Teacher hourly rate updated successfully',
+      teacherId,
+      hourlyRate: parseFloat(hourlyRate)
+    });
+  } catch (error) {
+    console.error('Admin update teacher rate error:', error);
+    res.status(500).json({ error: 'Failed to update teacher hourly rate' });
+  }
+});
+
+// Get detailed teacher salary report
+app.get('/api/admin/teacher-salary-report', authenticateToken, authorizeRole('Admin'), async (req, res) => {
+  try {
+    const { fromDate, toDate, teacherId } = req.query;
+    let dateQuery = {};
+    
+    if (fromDate || toDate) {
+      dateQuery.date = {};
+      if (fromDate) dateQuery.date.$gte = new Date(fromDate);
+      if (toDate) dateQuery.date.$lte = new Date(toDate);
+    }
+
+    let hoursQuery = { ...dateQuery };
+    if (teacherId) {
+      hoursQuery.teacherId = new ObjectId(teacherId);
+    }
+
+    // Get all teachers with their hourly rates
+    const teachers = await db.collection('users').find(
+      { role: 'Teacher' },
+      { projection: { firstName: 1, lastName: 1, email: 1, hourlyRate: 1 } }
+    ).toArray();
+
+    // Get teacher hours data
+    const teacherHours = await db.collection('teacherHours').aggregate([
+      { $match: hoursQuery },
+      { $lookup: {
+          from: 'users',
+          localField: 'teacherId',
+          foreignField: '_id',
+          as: 'teacher',
+          pipeline: [{ $project: { firstName: 1, lastName: 1, email: 1, hourlyRate: 1 } }]
+      }},
+      { $unwind: '$teacher' },
+      { $sort: { date: -1 } }
+    ]).toArray();
+
+    // Calculate detailed salary report
+    const salaryReport = {};
+    
+    teachers.forEach(teacher => {
+      salaryReport[teacher._id.toString()] = {
+        teacher: {
+          _id: teacher._id,
+          firstName: teacher.firstName,
+          lastName: teacher.lastName,
+          email: teacher.email,
+          hourlyRate: teacher.hourlyRate || 25
+        },
+        totalHours: 0,
+        totalEntries: 0,
+        totalSalary: 0,
+        entries: [],
+        averageHoursPerEntry: 0,
+        lastWorkedDate: null
+      };
+    });
+
+    teacherHours.forEach(entry => {
+      const teacherId = entry.teacherId.toString();
+      const hourlyRate = entry.teacher.hourlyRate || 25;
+      const hours = parseFloat(entry.hours || 0);
+      const entrySalary = hours * hourlyRate;
+
+      if (salaryReport[teacherId]) {
+        salaryReport[teacherId].totalHours += hours;
+        salaryReport[teacherId].totalEntries += 1;
+        salaryReport[teacherId].totalSalary += entrySalary;
+        salaryReport[teacherId].entries.push({
+          _id: entry._id,
+          date: entry.date,
+          hours: hours,
+          hourlyRate: hourlyRate,
+          salary: entrySalary,
+          notes: entry.notes,
+          paymentStatus: entry.paymentStatus || 'pending'
+        });
+        
+        // Update last worked date
+        const entryDate = new Date(entry.date);
+        if (!salaryReport[teacherId].lastWorkedDate || entryDate > new Date(salaryReport[teacherId].lastWorkedDate)) {
+          salaryReport[teacherId].lastWorkedDate = entry.date;
+        }
+      }
+    });
+
+    // Calculate averages and sort entries
+    Object.values(salaryReport).forEach(report => {
+      if (report.totalEntries > 0) {
+        report.averageHoursPerEntry = report.totalHours / report.totalEntries;
+        report.entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+      }
+    });
+
+    // Convert to array and sort by total salary (highest first)
+    const reportArray = Object.values(salaryReport)
+      .filter(report => report.totalEntries > 0 || teacherId) // Show only teachers with entries, unless specific teacher requested
+      .sort((a, b) => b.totalSalary - a.totalSalary);
+
+    // Calculate overall totals
+    const overallTotals = reportArray.reduce((totals, report) => ({
+      totalTeachers: totals.totalTeachers + (report.totalEntries > 0 ? 1 : 0),
+      totalHours: totals.totalHours + report.totalHours,
+      totalSalary: totals.totalSalary + report.totalSalary,
+      totalEntries: totals.totalEntries + report.totalEntries
+    }), { totalTeachers: 0, totalHours: 0, totalSalary: 0, totalEntries: 0 });
+
+    res.json({ 
+      salaryReport: reportArray,
+      overallTotals,
+      dateRange: { fromDate: fromDate || null, toDate: toDate || null },
+      message: 'Teacher salary report generated successfully' 
+    });
+  } catch (error) {
+    console.error('Admin salary report error:', error);
+    res.status(500).json({ error: 'Failed to generate salary report' });
   }
 });
 

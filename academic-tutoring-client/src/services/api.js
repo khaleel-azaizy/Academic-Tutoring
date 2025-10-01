@@ -251,6 +251,14 @@ export const roleAPI = {
   },
 
   // Parent
+  getAllTeachers: async () => {
+    try {
+      const res = await api.get('/teachers');
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
   searchTeachers: async (q) => {
     try {
       const res = await api.get('/teachers/search', { params: { q } });
@@ -377,6 +385,111 @@ export const roleAPI = {
     try {
       const res = await api.delete('/profile');
       return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  }
+};
+
+// Admin API methods
+export const adminAPI = {
+  // Get admin dashboard stats
+  getDashboardStats: async () => {
+    try {
+      const response = await api.get('/admin/dashboard');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Get all users
+  getAllUsers: async (params = {}) => {
+    try {
+      const response = await api.get('/admin/users', { params });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Get all lessons
+  getAllLessons: async (params = {}) => {
+    try {
+      const response = await api.get('/admin/lessons', { params });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Get teacher payments
+  getTeacherPayments: async (params = {}) => {
+    try {
+      const response = await api.get('/admin/teacher-payments', { params });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Ban/Unban user
+  updateUserBanStatus: async (userId, banData) => {
+    try {
+      const response = await api.put(`/admin/users/${userId}/ban`, banData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Delete lesson
+  deleteLesson: async (lessonId, reason) => {
+    try {
+      const response = await api.delete(`/admin/lessons/${lessonId}`, { 
+        data: { reason } 
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Update teacher payment status
+  updatePaymentStatus: async (paymentId, statusData) => {
+    try {
+      const response = await api.put(`/admin/teacher-payments/${paymentId}/status`, statusData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Get admin logs
+  getAdminLogs: async (params = {}) => {
+    try {
+      const response = await api.get('/admin/logs', { params });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Update teacher hourly rate
+  updateTeacherRate: async (teacherId, hourlyRate) => {
+    try {
+      const response = await api.put(`/admin/teachers/${teacherId}/hourly-rate`, { hourlyRate });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Get detailed teacher salary report
+  getTeacherSalaryReport: async (params = {}) => {
+    try {
+      const response = await api.get('/admin/teacher-salary-report', { params });
+      return response.data;
     } catch (error) {
       throw error.response?.data || error.message;
     }

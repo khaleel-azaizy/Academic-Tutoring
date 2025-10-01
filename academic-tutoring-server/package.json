@@ -2,8 +2,10 @@
   "name": "academic-tutoring-server",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "Router.js",
   "scripts": {
+    "start": "node Router.js",
+    "dev": "nodemon Router.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -17,6 +19,7 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.9.0",
-    "nodeman": "^1.1.2"
+    "nodeman": "^1.1.2",
+    "openai": "^6.0.0"
   }
 }
