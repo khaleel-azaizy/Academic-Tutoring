@@ -343,7 +343,7 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
                 )}
               </div>
 
-              <div className="message-input">
+              <div className="message-inputs">
                 <input
                   type="text"
                   placeholder="Type a message..."

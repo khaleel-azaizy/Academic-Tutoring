@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Settings, 
   User, 
@@ -8,17 +8,19 @@ import {
   MessageCircle, 
   LogOut,
   UserCheck,
-  UserPlus,
-  Home,
   Moon,
   Sun,
-  Bot
+  Bot,
+  ChevronRight,
+  ChevronLeft
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 const Header = ({ user, onLogout, onProfile, onBackToDashboard, notifications = [], onMarkAllRead, onMessages, onAIChat, currentView = 'dashboard' }) => {
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isExpanded, setIsExpanded] = useState(true);
   const { isDarkMode, toggleTheme } = useTheme();
+  const [openDropdown, setOpenDropdown] = useState(null); // 'notifications'
 
   useEffect(() => {
     const unread = notifications.filter(n => !n.read).length;
@@ -30,6 +32,12 @@ const Header = ({ user, onLogout, onProfile, onBackToDashboard, notifications = 
       onMarkAllRead();
     }
   };
+
+  const toggleSidebar = () => {
+    setIsExpanded(!isExpanded);
+  };
+
+  // Removed decorative pulse; keeping minimal.
 
   const getProfileButtonContent = () => {
     if (currentView === 'profile') {
@@ -51,98 +59,175 @@ const Header = ({ user, onLogout, onProfile, onBackToDashboard, notifications = 
   const getRoleDisplay = (role) => {
     switch (role) {
       case 'Teacher':
-        return { title: 'Teacher Dashboard', icon: UserCheck, color: '#667eea' };
+        return { title: 'Teacher', icon: UserCheck, color: '#667eea' };
       case 'Student':
-        return { title: 'Student Dashboard', icon: GraduationCap, color: '#28a745' };
+        return { title: 'Student', icon: GraduationCap, color: '#28a745' };
       case 'Parent':
-        return { title: 'Parent Dashboard', icon: Users, color: '#fd7e14' };
+        return { title: 'Parent', icon: Users, color: '#fd7e14' };
+      case 'Admin':
+        return { title: 'Admin', icon: Settings, color: '#dc3545' };
       default:
-        return { title: 'Dashboard', icon: User, color: '#6c757d' };
+        return { title: 'User', icon: User, color: '#6c757d' };
     }
   };
 
   const roleInfo = getRoleDisplay(user?.role);
 
+  const sidebarItems = [
+    {
+      icon: roleInfo.icon,
+      label: roleInfo.title,
+      isRole: true,
+      color: roleInfo.color
+    },
+    {
+      icon: Bell,
+      label: 'Notifications',
+      action: () => {
+        setOpenDropdown(prev => prev === 'notifications' ? null : 'notifications');
+      },
+      badge: unreadCount > 0 ? unreadCount : null,
+      dropdown: 'notifications'
+    },
+    {
+      icon: MessageCircle,
+      label: 'Messages',
+      action: onMessages,
+      show: !!onMessages
+    },
+    {
+      icon: Bot,
+      label: 'AI Tutor',
+      action: onAIChat,
+      show: !!onAIChat
+    },
+    {
+      icon: isDarkMode ? Sun : Moon,
+      label: isDarkMode ? 'Light Mode' : 'Dark Mode',
+      action: toggleTheme
+    },
+    {
+      icon: profileButton.icon,
+      label: profileButton.text,
+      action: profileButton.action
+    },
+    {
+      icon: LogOut,
+      label: 'Logout',
+      action: onLogout,
+      isLogout: true
+    }
+  ];
+
+  const closePopup = useCallback(() => setOpenDropdown(null), []);
+
+  // ESC key to close popup
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape') closePopup();
+    };
+    if (openDropdown) window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [openDropdown, closePopup]);
+
   return (
-    <header className="app-header">
-      <div className="header-content">
-        <div className="header-left">
-          <div className="role-badge" style={{ backgroundColor: roleInfo.color }}>
-            <span className="role-icon"><roleInfo.icon size={16} /></span>
-            <span className="role-text">{user?.role}</span>
-          </div>
-          <div className="user-info">
-            <h1 className="welcome-text">Welcome back, {user?.firstName}!</h1>
-            <p className="user-email">{user?.email}</p>
-          </div>
-        </div>
-        <div className="header-right">
-          <button className="theme-toggle-btn" onClick={toggleTheme} title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
-            <span className="theme-icon">
-              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-            </span>
-          </button>
-          
-          <div className="notification-container">
-            <button className="notification-btn">
-              <span className="notification-icon"><Bell size={18} /></span>
-              {unreadCount > 0 && <span className="notification-badge">{unreadCount}</span>}
-            </button>
-            
-            <div className="notification-dropdown">
-              <div className="notification-header">
-                <h3>Notifications</h3>
-                {unreadCount > 0 && (
-                  <button className="mark-all-read-btn" onClick={handleMarkAllRead}>
-                    Mark all read
+    <>
+    <aside className={`app-sidebar ${isExpanded ? 'expanded' : 'collapsed'}`}>
+      {/* Toggle Button */}
+      <button 
+        className="sidebar-toggle-btn" 
+        onClick={toggleSidebar} 
+        aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+        title={isExpanded ? 'Collapse' : 'Expand'}
+      >
+        {/* Arrow points to the direction the sidebar WILL move */}
+        {isExpanded ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+      </button>
+
+      {/* Sidebar Content */}
+      <div className="sidebar-content">
+        {sidebarItems.map((item, index) => {
+          if (item.show === false) return null;
+
+          return (
+            <div key={index} className="sidebar-item-container">
+              {item.dropdown ? (
+                <div className={`sidebar-dropdown-container`}>
+                  <button 
+                    className={`sidebar-item ${item.isRole ? 'role-item' : ''} ${item.isLogout ? 'logout-item' : ''} ${openDropdown === item.dropdown ? 'active' : ''}`}
+                    style={item.isRole ? { backgroundColor: item.color } : {}}
+                    onClick={item.action}
+                    title={!isExpanded ? item.label : undefined}
+                  >
+                    <span className="sidebar-icon">
+                      <item.icon size={20} />
+                    </span>
+                    {isExpanded && (
+                      <>
+                        <span className="sidebar-label">{item.label}</span>
+                        {item.badge && <span className="sidebar-badge">{item.badge}</span>}
+                      </>
+                    )}
                   </button>
-                )}
-              </div>
-              <div className="notification-list">
-                {notifications.length === 0 ? (
-                  <div className="no-notifications">No notifications</div>
-                ) : (
-                  notifications.map((notification) => (
-                    <div key={notification._id} className={`notification-item ${!notification.read ? 'unread' : ''}`}>
-                      <div className="notification-content">
-                        <div className="notification-title">{notification.title}</div>
-                        <div className="notification-message">{notification.message}</div>
-                        <div className="notification-time">
-                          {new Date(notification.createdAt).toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+                </div>
+              ) : (
+                <button 
+                  className={`sidebar-item ${item.isRole ? 'role-item' : ''} ${item.isLogout ? 'logout-item' : ''}`}
+                  onClick={item.action}
+                  style={item.isRole ? { backgroundColor: item.color } : {}}
+                  title={!isExpanded ? item.label : undefined}
+                >
+                  <span className="sidebar-icon">
+                    <item.icon size={20} />
+                  </span>
+                  {isExpanded && (
+                    <>
+                      <span className="sidebar-label">{item.label}</span>
+                      {item.badge && <span className="sidebar-badge">{item.badge}</span>}
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </aside>
+    {openDropdown === 'notifications' && (
+      <div className="notification-popup-overlay" onClick={closePopup}>
+        <div className="notification-popup" onClick={(e) => e.stopPropagation()}>
+          <div className="notification-popup-header">
+            <h3>Notifications</h3>
+            <div className="notification-popup-actions">
+              {unreadCount > 0 && (
+                <button className="mark-all-read-btn" onClick={handleMarkAllRead}>
+                  Mark all read
+                </button>
+              )}
+              <button className="close-popup-btn" onClick={closePopup} aria-label="Close notifications">✕</button>
             </div>
           </div>
-          
-          {onMessages && (
-            <button className="messages-btn" onClick={onMessages}>
-              <span className="messages-icon"><MessageCircle size={18} /></span>
-              Messages
-            </button>
-          )}
-          
-          {onAIChat && (
-            <button className="ai-chat-btn" onClick={onAIChat}>
-              <span className="ai-chat-icon"><Bot size={18} /></span>
-              AI Tutor
-            </button>
-          )}
-          
-          <button className="profile-btn" onClick={profileButton.action}>
-            <span className="profile-icon"><profileButton.icon size={18} /></span>
-            {profileButton.text}
-          </button>
-          <button className="logout-btn" onClick={onLogout}>
-            <span className="logout-icon"><LogOut size={18} /></span>
-            Logout
-          </button>
+          <div className="notification-list">
+            {notifications.length === 0 ? (
+              <div className="no-notifications">No notifications</div>
+            ) : (
+              notifications.map((notification) => (
+                <div key={notification._id} className={`notification-item ${!notification.read ? 'unread' : ''}`}>
+                  <div className="notification-content">
+                    <div className="notification-title">{notification.title}</div>
+                    <div className="notification-message">{notification.message}</div>
+                    <div className="notification-time">
+                      {new Date(notification.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
-    </header>
+    )}
+    </>
   );
 };
 

@@ -35,7 +35,7 @@ const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [openModal, setOpenModal] = useState(null); // 'hours' | 'constraint' | 'book' | 'contact' | 'chat' | 'teacher-chat' | 'ai-chat'
-  const [activeTab, setActiveTab] = useState('overview'); // For controlling tabs
+  const [activeTab, setActiveTab] = useState(''); // For controlling tabs
 
   // Teacher action state
   const [hoursForm, setHoursForm] = useState({ date: '', hours: '', notes: '' });
@@ -2841,8 +2841,8 @@ const Dashboard = () => {
   }
 
   if (showProfile) {
-  return (
-        <div>
+    return (
+      <div className="app-layout">
         <Header 
           user={user} 
           onLogout={handleLogout} 
@@ -2854,7 +2854,9 @@ const Dashboard = () => {
           onAIChat={() => setOpenModal('ai-chat')}
           currentView="profile" 
         />
-        <Profile user={user} onUpdateUser={handleUpdateUser} onDeleteAccount={handleDeleteAccount} />
+        <main className="main-content">
+          <Profile user={user} onUpdateUser={handleUpdateUser} onDeleteAccount={handleDeleteAccount} />
+        </main>
         
         {user?.role !== 'Parent' && (
           <MessagesSidebar 
@@ -2864,12 +2866,12 @@ const Dashboard = () => {
             roleAPI={roleAPI} 
           />
         )}
-        </div>
+      </div>
     );
   }
 
   return (
-    <div>
+    <div className="app-layout">
       <Header 
         user={user} 
         onLogout={handleLogout} 
@@ -2882,25 +2884,25 @@ const Dashboard = () => {
         currentView="dashboard" 
       />
       
-      <div className="dashboard-container">
-      <div className="dashboard-content">
-
-        <div className="dashboard-card">
-          {getRoleActions()}
+      <main className="main-content">
+        <div className="dashboard-container">
+          <div className="dashboard-content">
+            <div className="dashboard-card">
+              {getRoleActions()}
+            </div>
+          </div>
+          {renderTooltip()}
+          {renderModals()}
         </div>
-      </div>
-
-        {renderTooltip()}
-        {renderModals()}
-      </div>
+      </main>
       
       {user?.role !== 'Parent' && (
-      <MessagesSidebar 
-        isOpen={showMessages} 
-        onClose={handleCloseMessages} 
-        user={user} 
-        roleAPI={roleAPI} 
-      />
+        <MessagesSidebar 
+          isOpen={showMessages} 
+          onClose={handleCloseMessages} 
+          user={user} 
+          roleAPI={roleAPI} 
+        />
       )}
     </div>
   );

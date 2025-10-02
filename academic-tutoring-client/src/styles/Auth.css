@@ -26,7 +26,10 @@
   justify-content: flex-start;
   color: var(--text-primary);
   transition: all 0.3s ease;
-  overflow: hidden;
+  /* allow internal scroll if content taller than viewport (esp. register) */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Login form - compact height */
@@ -35,9 +38,10 @@
   height: auto;
 }
 
-/* Register form - full height */
+/* Register form - allow natural height but cap to viewport with scroll */
 .auth-card.register-card {
-  height: calc(100vh - 60px);
+  max-height: calc(100vh - 80px);
+  height: auto;
 }
 
 .auth-header {
@@ -512,9 +516,9 @@
   }
   
   .auth-card {
-    padding: 8px 10px;
+    padding: 10px 14px;
     max-width: 100%;
-    overflow: hidden;
+    overflow-y: auto;
   }
   
   .auth-card.login-card {
@@ -523,7 +527,7 @@
   }
   
   .auth-card.register-card {
-    height: calc(100vh - 16px);
+    max-height: calc(100vh - 24px);
   }
   
   .auth-title {
@@ -551,7 +555,7 @@
   /* Mobile: single column layout */
   .auth-form.two-column {
     grid-template-columns: 1fr;
-    gap: 4px;
+    gap: 6px;
   }
   
   .form-column {
@@ -576,8 +580,23 @@
   }
   
   .role-option {
-    min-height: 35px;
+    min-height: 38px;
     font-size: 0.75rem;
-    padding: 6px 4px;
+    padding: 6px 6px;
   }
+}
+
+/* Extra-small devices tweaks */
+@media (max-width: 480px) {
+  .auth-card { border-radius: 14px; }
+  .auth-title { font-size: 1rem; }
+  .auth-button { font-size: 0.75rem; padding: 8px 12px; }
+  .role-selection { padding: 4px; }
+  .role-option { font-size: 0.7rem; }
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .auth-card, .auth-button, .role-option, .password-toggle { transition: none !important; }
+  .auth-button.login-button::before, .role-option::before { animation: none !important; }
 }

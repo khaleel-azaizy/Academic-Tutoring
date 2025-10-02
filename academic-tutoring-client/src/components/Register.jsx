@@ -241,7 +241,6 @@ const Register = () => {
             {loading ? (
               <>
                 Signing up...
-                <span className="loading-spinner"></span>
               </>
             ) : (
               'Sign Up'

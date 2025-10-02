@@ -145,7 +145,6 @@ const Login = () => {
             {loading ? (
               <>
                 Logging in...
-                <span className="loading-spinner"></span>
               </>
             ) : (
               'Login'
