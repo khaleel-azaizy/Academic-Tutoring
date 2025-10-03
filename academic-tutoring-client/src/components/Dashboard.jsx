@@ -26,7 +26,10 @@ import {
   RotateCcw,
   FileText,
   MessageCircle,
-  Bot
+  Bot,
+  ArrowLeft,
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -59,15 +62,20 @@ const Dashboard = () => {
 
   // Parent action state
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [bookingForm, setBookingForm] = useState({ teacherEmail: '', dateTime: '', subject: '', durationMinutes: 60, studentEmail: '' });
   const [teacherList, setTeacherList] = useState([]);
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [availabilityDate, setAvailabilityDate] = useState('');
   const [availableSlots, setAvailableSlots] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [parentHistory, setParentHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  
+  // Booking flow state
+  const [bookingStep, setBookingStep] = useState(1); // 1: Subject, 2: Teacher, 3: Date/Time, 4: Confirm
   
   // Children management state
   const [children, setChildren] = useState([]);
@@ -288,9 +296,19 @@ const Dashboard = () => {
 
   const handleUpdateUser = async (profileData) => {
     try {
-      const response = await roleAPI.updateProfile(profileData);
-      setUser(response.user);
-      localStorage.setItem('user', JSON.stringify(response.user));
+      // Handle meeting link separately if it's a teacher
+      if (user?.role === 'Teacher' && profileData.teacherMeetingLink !== undefined) {
+        await roleAPI.updateMeetingLink(profileData.teacherMeetingLink);
+        // Remove meeting link from profile data to avoid conflicts
+        const { teacherMeetingLink, ...restProfileData } = profileData;
+        const response = await roleAPI.updateProfile(restProfileData);
+        setUser({ ...response.user, teacherMeetingLink: profileData.teacherMeetingLink });
+        localStorage.setItem('user', JSON.stringify({ ...response.user, teacherMeetingLink: profileData.teacherMeetingLink }));
+      } else {
+        const response = await roleAPI.updateProfile(profileData);
+        setUser(response.user);
+        localStorage.setItem('user', JSON.stringify(response.user));
+      }
     } catch (error) {
       console.error('Profile update failed:', error);
       throw error;
@@ -322,42 +340,82 @@ const Dashboard = () => {
     }
   };
 
-  // Real-time search for teachers
-  const handleSearchChange = (query) => {
-    console.log('Search query changed:', query);
-    setSearchQuery(query);
+  // Validation functions
+  const validateBookingStep = (step) => {
+    switch (step) {
+      case 1:
+        return selectedSubject !== '';
+      case 2:
+        return selectedTeacher !== '';
+      case 3:
+        return availabilityDate !== '' && bookingForm.durationMinutes > 0;
+      case 4:
+        return bookingForm.dateTime !== '' && bookingForm.teacherEmail !== '';
+      default:
+        return false;
+    }
+  };
+
+  const canProceedToNextStep = (currentStep) => {
+    return validateBookingStep(currentStep);
+  };
+
+  // Validate booking time (minimum 24 hours advance notice)
+  const validateBookingTime = (dateTime) => {
+    const now = new Date();
+    const bookingTime = new Date(dateTime);
+    const hoursUntilBooking = (bookingTime - now) / (1000 * 60 * 60);
     
+    if (hoursUntilBooking < 24) {
+      return { valid: false, message: 'Lessons must be booked at least 24 hours in advance' };
+    }
+    
+    if (hoursUntilBooking > 24 * 30) {
+      return { valid: false, message: 'Lessons cannot be booked more than 30 days in advance' };
+    }
+    
+    return { valid: true };
+  };
+
+  // Handle subject selection
+  const handleSubjectSelect = async (subject) => {
+    setSelectedSubject(subject);
+    setBookingForm({ ...bookingForm, subject });
+    setBookingStep(2);
+    
+    // Load teachers for this subject
+    try {
+      setIsSearching(true);
+      const data = await roleAPI.searchTeachers('', subject);
+      setTeacherList(data.teachers || []);
+    } catch (error) {
+      console.error('Error loading teachers for subject:', error);
+      setTeacherList([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Real-time search for teachers (within selected subject)
+  const handleSearchChange = (query) => {
+    setSearchQuery(query);
+    performSearch(query, selectedSubject);
+  };
+
+  // Perform search with both query and subject filter
+  const performSearch = (query, subject) => {
     // Clear existing timeout
     if (searchTimeout) {
       clearTimeout(searchTimeout);
     }
     
-    // If query is empty, load all teachers
-    if (!query.trim()) {
-      setIsSearching(false); // Stop loading animation immediately
-      const timeout = setTimeout(async () => {
-        try {
-          const teachersData = await roleAPI.getAllTeachers();
-          setTeacherList(teachersData.teachers || []);
-        } catch (error) {
-          console.error('Error loading all teachers:', error);
-          setTeacherList([]);
-        }
-      }, 100); // Small delay to prevent too many API calls
-      setSearchTimeout(timeout);
-      return;
-    }
-    
     // Set loading state
     setIsSearching(true);
-    console.log('Starting search for:', query);
     
     // Set new timeout for search
     const timeout = setTimeout(async () => {
       try {
-        console.log('Executing search for:', query);
-        const data = await roleAPI.searchTeachers(query);
-        console.log('Search results:', data.teachers);
+        const data = await roleAPI.searchTeachers(query, subject);
         setTeacherList(data.teachers || []);
       } catch (error) {
         console.error('Search failed:', error);
@@ -368,6 +426,20 @@ const Dashboard = () => {
     }, 300); // 300ms delay for real-time search
     
     setSearchTimeout(timeout);
+  };
+
+  // Reset booking flow
+  const resetBookingFlow = () => {
+    setBookingStep(1);
+    setSelectedSubject('');
+    setSelectedTeacher('');
+    setSearchQuery('');
+    setTeacherList([]);
+    setAvailabilityDate('');
+    setAvailableSlots([]);
+    setBookingForm({ teacherEmail: '', dateTime: '', subject: '', durationMinutes: 60, studentEmail: '' });
+    setIsSearching(false);
+    setIsCheckingAvailability(false);
   };
 
   // Children management functions
@@ -1105,167 +1177,287 @@ const Dashboard = () => {
                   <div className="grid-one">
                     <p className="muted">Schedule and confirm lessons with instructors. Interacts: Teachers (schedule), Students (attendance).</p>
 
-                    <div className="section">
-                      <h4 className="section-title">1) Choose Instructor</h4>
-                      <div className="search-container">
-                        <div className="search-input-wrapper">
-                          <input 
-                            className="search-input" 
-                            value={searchQuery} 
-                            onChange={(e) => handleSearchChange(e.target.value)} 
-                            placeholder="Search teachers by name, email, or subject..." 
-                          />
-                          {isSearching && <div className="search-loading"></div>}
-                          {searchQuery && (
-                            <button 
-                              className="clear-search-btn"
-                              onClick={async () => {
-                                setSearchQuery('');
-                                setIsSearching(false); // Stop loading animation
-                                // Clear existing timeout if any
-                                if (searchTimeout) {
-                                  clearTimeout(searchTimeout);
-                                }
-                                try {
-                                  const teachersData = await roleAPI.getAllTeachers();
-                                  setTeacherList(teachersData.teachers || []);
-                                } catch (error) {
-                                  console.error('Error reloading teachers:', error);
-                                  showError('Failed to load teachers');
-                                }
-                              }}
-                            >
-                              ×
-                            </button>
-                          )}
+                    {/* Booking Progress Indicator */}
+                    <div className="booking-progress">
+                      <div className={`progress-step ${bookingStep >= 1 ? 'active' : ''} ${bookingStep > 1 ? 'completed' : ''}`}>
+                        <div className="step-number">1</div>
+                        <div className="step-label">Choose Subject</div>
                       </div>
-                        
-
-                        {searchQuery && !isSearching && teacherList.length === 0 && (
-                          <div className="no-results">
-                            <div className="no-results-icon">
-                              <Search className="icon" />
-                            </div>
-                            <p>No teachers found matching "{searchQuery}"</p>
-                            <p className="no-results-suggestion">Try adjusting your search terms</p>
-                          </div>
-                        )}
-                        {isSearching && (
-                          <div className="search-loading-state">
-                            <div className="loading-spinner"></div>
-                            <p>Searching for teachers...</p>
-                          </div>
-                        )}
-                        {teacherList.length > 0 && (
-                          <div className="search-results">
-                            <div className="results-header">
-                              <span className="results-count">
-                                <GraduationCap className="icon" />
-                                {teacherList.length} teacher{teacherList.length !== 1 ? 's' : ''} {searchQuery ? 'found' : 'available'}
-                              </span>
-                            </div>
-                            <div className="teacher-cards">
-                        {teacherList.map(t => (
-                                <div key={t._id} className={`teacher-card ${selectedTeacher === t._id ? 'selected' : ''}`} onClick={() => setSelectedTeacher(t._id)}>
-                                  <div className="teacher-avatar">
-                                    <span className="teacher-initial">{t.firstName.charAt(0)}{t.lastName.charAt(0)}</span>
-                                  </div>
-                                  <div className="teacher-info">
-                                    <div className="teacher-header">
-                                      <div className="teacher-name">{t.firstName} {t.lastName}</div>
-                                    </div>
-                                    <div className="teacher-email">{t.email}</div>
-                                    <div className="teacher-status">
-                                      <span className="status-dot available"></span>
-                                      <span className="status-text">Available</span>
-                                    </div>
-                                  </div>
-                          </div>
-                        ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {!isSearching && teacherList.length === 0 && !searchQuery && (
-                          <div className="no-teachers">
-                            <div className="no-teachers-icon">
-                              <GraduationCap className="icon" />
-                            </div>
-                            <p>No teachers available at the moment</p>
-                            <p className="no-teachers-suggestion">Please try again later or contact support</p>
-                          </div>
-                        )}
+                      <div className={`progress-step ${bookingStep >= 2 ? 'active' : ''} ${bookingStep > 2 ? 'completed' : ''}`}>
+                        <div className="step-number">2</div>
+                        <div className="step-label">Select Teacher</div>
+                      </div>
+                      <div className={`progress-step ${bookingStep >= 3 ? 'active' : ''} ${bookingStep > 3 ? 'completed' : ''}`}>
+                        <div className="step-number">3</div>
+                        <div className="step-label">Pick Date & Time</div>
+                      </div>
+                      <div className={`progress-step ${bookingStep >= 4 ? 'active' : ''}`}>
+                        <div className="step-number">4</div>
+                        <div className="step-label">Confirm Booking</div>
                       </div>
                     </div>
 
-                    <div className="section">
-                      <h4 className="section-title">2) Pick Date & Duration</h4>
-                      <div className="booking-form-grid">
-                        <div className="form-group">
-                          <label className="form-label">
-                            <Calendar className="icon" />
-                            Select Date
-                          </label>
-                          <input 
-                            type="date" 
-                            className="form-input" 
-                            value={availabilityDate} 
-                            onChange={(e) => setAvailabilityDate(e.target.value)}
-                            min={new Date().toISOString().split('T')[0]}
-                          />
-                          <div className="form-hint">Choose a date for your lesson</div>
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">
-                            <Clock className="icon" />
-                            Duration
-                          </label>
-                          <div className="duration-options">
-                            <button 
-                              className={`duration-btn ${bookingForm.durationMinutes === 30 ? 'selected' : ''}`}
-                              onClick={() => setBookingForm({ ...bookingForm, durationMinutes: 30 })}
-                            >
-                              30 min
-                            </button>
-                            <button 
-                              className={`duration-btn ${bookingForm.durationMinutes === 60 ? 'selected' : ''}`}
-                              onClick={() => setBookingForm({ ...bookingForm, durationMinutes: 60 })}
-                            >
-                              60 min
-                            </button>
-                            <button 
-                              className={`duration-btn ${bookingForm.durationMinutes === 90 ? 'selected' : ''}`}
-                              onClick={() => setBookingForm({ ...bookingForm, durationMinutes: 90 })}
-                            >
-                              90 min
-                            </button>
-                            <button 
-                              className={`duration-btn ${bookingForm.durationMinutes === 120 ? 'selected' : ''}`}
-                              onClick={() => setBookingForm({ ...bookingForm, durationMinutes: 120 })}
-                            >
-                              120 min
-                            </button>
-                          </div>
-                          <div className="form-hint">Select your preferred lesson duration</div>
-                        </div>
-                      </div>
-                      <div className="inline-actions">
-                        <button 
-                          className="auth-button primary" 
-                          disabled={!selectedTeacher || !availabilityDate} 
-                          onClick={() => handleAction(async () => {
-                          const data = await roleAPI.getTeacherAvailability(selectedTeacher, { date: availabilityDate, durationMinutes: bookingForm.durationMinutes });
-                          setAvailableSlots(data.slots || []);
-                          })}
-                        >
-                          <Search className="icon" /> Check Availability
-                        </button>
-                      </div>
-                    </div>
-
-                    {availableSlots.length > 0 && (
+                    {/* Step 1: Choose Subject */}
+                    {bookingStep === 1 && (
                       <div className="section">
-                        <h4 className="section-title">3) Select a Time</h4>
+                        <h4 className="section-title">
+                          <BookOpen className="icon" />
+                          What subject would you like help with?
+                        </h4>
+                        <div className="subjects-grid">
+                          {[
+                            'Mathematics', 'English', 'Science', 'Physics', 'Chemistry', 'Biology',
+                            'History', 'Geography', 'Computer Science', 'Art', 'Music', 'Spanish',
+                            'French', 'German', 'Economics', 'Psychology', 'Literature', 'Writing',
+                            'Algebra', 'Geometry', 'Calculus', 'Statistics', 'World History', 'US History',
+                            'Government', 'Philosophy', 'Environmental Science', 'Astronomy'
+                          ].map(subject => (
+                            <button
+                              key={subject}
+                              className="subject-card"
+                              onClick={() => handleSubjectSelect(subject)}
+                            >
+                              <div className="subject-icon">
+                                <BookOpen size={24} />
+                              </div>
+                              <div className="subject-name">{subject}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 2: Select Teacher */}
+                    {bookingStep === 2 && (
+                      <div className="section">
+                        <div className="step-header">
+                          <h4 className="section-title">
+                            <GraduationCap className="icon" />
+                            Choose a teacher for {selectedSubject}
+                          </h4>
+                          <button className="back-button" onClick={() => {
+                            setBookingStep(1);
+                            setSelectedTeacher('');
+                            setTeacherList([]);
+                          }}>
+                            <ArrowLeft size={16} />
+                            Back to Subjects
+                          </button>
+                        </div>
+                        
+                        <div className="search-container">
+                          <div className="search-input-wrapper">
+                            <input 
+                              className="search-input" 
+                              value={searchQuery} 
+                              onChange={(e) => handleSearchChange(e.target.value)} 
+                              placeholder="Search teachers by name or email..." 
+                            />
+                            {isSearching && <div className="search-loading"></div>}
+                            {searchQuery && (
+                              <button 
+                                className="clear-search-btn"
+                                onClick={() => {
+                                  setSearchQuery('');
+                                  performSearch('', selectedSubject);
+                                }}
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+
+                          {isSearching && (
+                            <div className="search-loading-state">
+                              <div className="loading-spinner"></div>
+                              <p>Searching for teachers...</p>
+                            </div>
+                          )}
+
+                          {!isSearching && teacherList.length > 0 && (
+                            <div className="search-results">
+                              <div className="results-header">
+                                <span className="results-count">
+                                  <GraduationCap className="icon" />
+                                  {teacherList.length} teacher{teacherList.length !== 1 ? 's' : ''} available for {selectedSubject}
+                                </span>
+                              </div>
+                              <div className="teacher-cards">
+                                {teacherList.map(t => (
+                                  <div key={t._id} className={`teacher-card ${selectedTeacher === t._id ? 'selected' : ''}`} onClick={() => {
+                                    setSelectedTeacher(t._id);
+                                    setBookingForm({ ...bookingForm, teacherEmail: t.email });
+                                    // Don't auto-advance to step 3, let user confirm selection
+                                  }}>
+                                    <div className="teacher-avatar">
+                                      <span className="teacher-initial">{t.firstName.charAt(0)}{t.lastName.charAt(0)}</span>
+                                    </div>
+                                    <div className="teacher-info">
+                                      <div className="teacher-header">
+                                        <div className="teacher-name">{t.firstName} {t.lastName}</div>
+                                      </div>
+                                      <div className="teacher-email">{t.email}</div>
+                                      {t.specializations && t.specializations.length > 0 && (
+                                        <div className="teacher-specializations">
+                                          <div className="specializations-label">Specializes in:</div>
+                                          <div className="specializations-tags">
+                                            {t.specializations.slice(0, 3).map(specialization => (
+                                              <span key={specialization} className="specialization-tag">
+                                                {specialization}
+                                              </span>
+                                            ))}
+                                            {t.specializations.length > 3 && (
+                                              <span className="specialization-more">
+                                                +{t.specializations.length - 3} more
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                      <div className="teacher-status">
+                                        <span className="status-dot available"></span>
+                                        <span className="status-text">Available</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {!isSearching && teacherList.length === 0 && (
+                            <div className="no-teachers">
+                              <div className="no-teachers-icon">
+                                <GraduationCap className="icon" />
+                              </div>
+                              <p>No teachers available for {selectedSubject}</p>
+                              <p className="no-teachers-suggestion">Try selecting a different subject</p>
+                              <button className="back-button" onClick={() => setBookingStep(1)}>
+                                <ArrowLeft size={16} />
+                                Back to Subjects
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Continue Button for Step 2 */}
+                          {selectedTeacher && (
+                            <div className="step-actions">
+                              <button 
+                                className="auth-button primary"
+                                disabled={!canProceedToNextStep(2)}
+                                onClick={() => setBookingStep(3)}
+                              >
+                                Continue to Date & Time
+                                <ArrowRight size={16} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 3: Pick Date & Time */}
+                    {bookingStep === 3 && (
+                      <div className="section">
+                        <div className="step-header">
+                          <h4 className="section-title">
+                            <Calendar className="icon" />
+                            Pick Date & Time
+                          </h4>
+                          <button className="back-button" onClick={() => setBookingStep(2)}>
+                            <ArrowLeft size={16} />
+                            Back to Teachers
+                          </button>
+                        </div>
+                        <div className="booking-form-grid">
+                          <div className="form-group">
+                            <label className="form-label">
+                              <Calendar className="icon" />
+                              Select Date
+                            </label>
+                            <input 
+                              type="date" 
+                              className="form-input" 
+                              value={availabilityDate} 
+                              onChange={(e) => setAvailabilityDate(e.target.value)}
+                              min={new Date().toISOString().split('T')[0]}
+                            />
+                            <div className="form-hint">Choose a date for your lesson</div>
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label">
+                              <Clock className="icon" />
+                              Duration
+                            </label>
+                            <div className="duration-options">
+                              <button 
+                                className={`duration-btn ${bookingForm.durationMinutes === 30 ? 'selected' : ''}`}
+                                onClick={() => setBookingForm({ ...bookingForm, durationMinutes: 30 })}
+                              >
+                                30 min
+                              </button>
+                              <button 
+                                className={`duration-btn ${bookingForm.durationMinutes === 60 ? 'selected' : ''}`}
+                                onClick={() => setBookingForm({ ...bookingForm, durationMinutes: 60 })}
+                              >
+                                60 min
+                              </button>
+                              <button 
+                                className={`duration-btn ${bookingForm.durationMinutes === 90 ? 'selected' : ''}`}
+                                onClick={() => setBookingForm({ ...bookingForm, durationMinutes: 90 })}
+                              >
+                                90 min
+                              </button>
+                              <button 
+                                className={`duration-btn ${bookingForm.durationMinutes === 120 ? 'selected' : ''}`}
+                                onClick={() => setBookingForm({ ...bookingForm, durationMinutes: 120 })}
+                              >
+                                120 min
+                              </button>
+                            </div>
+                            <div className="form-hint">Select your preferred lesson duration</div>
+                          </div>
+                        </div>
+                        <div className="inline-actions">
+                          <button 
+                            className="auth-button primary" 
+                            disabled={!selectedTeacher || !availabilityDate || isCheckingAvailability} 
+                            onClick={() => handleAction(async () => {
+                              try {
+                                setIsCheckingAvailability(true);
+                                const data = await roleAPI.getTeacherAvailability(selectedTeacher, { date: availabilityDate, durationMinutes: bookingForm.durationMinutes });
+                                setAvailableSlots(data.slots || []);
+                                if (data.slots && data.slots.length === 0) {
+                                  showWarning('No available time slots found for the selected date and duration. Please try a different date.');
+                                }
+                              } catch (error) {
+                                console.error('Error checking availability:', error);
+                                showError('Failed to check teacher availability. Please try again.');
+                                setAvailableSlots([]);
+                              } finally {
+                                setIsCheckingAvailability(false);
+                              }
+                            })}
+                          >
+                            {isCheckingAvailability ? (
+                              <>
+                                <Loader2 className="icon" style={{ animation: 'spin 1s linear infinite' }} />
+                                Checking...
+                              </>
+                            ) : (
+                              <>
+                                <Search className="icon" /> Check Availability
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Time Slots Section - Part of Step 3 */}
+                    {bookingStep === 3 && availableSlots.length > 0 && (
+                      <div className="section">
+                        <h4 className="section-title">Select a Time</h4>
                         <div className="time-slots-container">
                           <div className="time-slots-header">
                             <span className="slots-count">🕐 {availableSlots.length} available time{availableSlots.length !== 1 ? 's' : ''}</span>
@@ -1294,7 +1486,14 @@ const Dashboard = () => {
                                 <div 
                                   key={iso} 
                                   className={`time-slot ${bookingForm.dateTime === iso ? 'selected' : ''}`} 
-                                  onClick={() => setBookingForm({ ...bookingForm, dateTime: iso, teacherEmail: (teacherList.find(t => t._id === selectedTeacher)?.email) || '' })}
+                                  onClick={() => {
+                                    const timeValidation = validateBookingTime(iso);
+                                    if (timeValidation.valid) {
+                                      setBookingForm({ ...bookingForm, dateTime: iso, teacherEmail: (teacherList.find(t => t._id === selectedTeacher)?.email) || '' });
+                                    } else {
+                                      showWarning(timeValidation.message);
+                                    }
+                                  }}
                                 >
                                   <div className="time-slot-header">
                                     <div className="time-display">
@@ -1313,124 +1512,166 @@ const Dashboard = () => {
                             })}
                           </div>
                         </div>
+                        
+                        {/* Continue Button for Step 3 */}
+                        {bookingForm.dateTime && (
+                          <div className="step-actions">
+                            <button 
+                              className="auth-button primary"
+                              disabled={!canProceedToNextStep(3)}
+                              onClick={() => setBookingStep(4)}
+                            >
+                              Continue to Confirmation
+                              <ArrowRight size={16} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    <div className="section">
-                      <h4 className="section-title">4) Add Details & Confirm</h4>
-                      <div className="booking-details-grid">
-                        <div className="form-group">
-                          <label className="form-label"><User className="icon" /> Student</label>
-                          {selectedChild ? (
-                            <div className="selected-child-display">
-                              <div className="selected-child-info">
-                                <div className="selected-child-avatar">
-                                  {(children.find(c => c._id === selectedChild)?.studentName || children.find(c => c._id === selectedChild)?.name || 'S').charAt(0).toUpperCase()}
-                                </div>
-                                <div className="selected-child-details">
-                                  <div className="selected-child-name">
-                                    {children.find(c => c._id === selectedChild)?.studentName || children.find(c => c._id === selectedChild)?.name || 'Student'}
+                    {/* Step 4: Confirm Booking */}
+                    {bookingStep === 4 && (
+                      <div className="section">
+                        <div className="step-header">
+                          <h4 className="section-title">
+                            <CheckCircle className="icon" />
+                            Confirm Your Booking
+                          </h4>
+                          <button className="back-button" onClick={() => setBookingStep(3)}>
+                            <ArrowLeft size={16} />
+                            Back to Time Selection
+                          </button>
+                        </div>
+                        <div className="booking-details-grid">
+                          <div className="form-group">
+                            <label className="form-label"><User className="icon" /> Student</label>
+                            {selectedChild ? (
+                              <div className="selected-child-display">
+                                <div className="selected-child-info">
+                                  <div className="selected-child-avatar">
+                                    {(children.find(c => c._id === selectedChild)?.studentName || children.find(c => c._id === selectedChild)?.name || 'S').charAt(0).toUpperCase()}
                                   </div>
-                                  <div className="selected-child-email">
-                                    {children.find(c => c._id === selectedChild)?.email}
+                                  <div className="selected-child-details">
+                                    <div className="selected-child-name">
+                                      {children.find(c => c._id === selectedChild)?.studentName || children.find(c => c._id === selectedChild)?.name || 'Student'}
+                                    </div>
+                                    <div className="selected-child-email">
+                                      {children.find(c => c._id === selectedChild)?.email}
+                                    </div>
                                   </div>
                                 </div>
+                                <button 
+                                  className="change-child-btn"
+                                  onClick={() => {
+                                    setSelectedChild('');
+                                    setBookingForm({ ...bookingForm, studentEmail: '' });
+                                  }}
+                                >
+                                  Change
+                                </button>
                               </div>
-                              <button 
-                                className="change-child-btn"
-                                onClick={() => {
-                                  setSelectedChild('');
-                                  setBookingForm({ ...bookingForm, studentEmail: '' });
-                                }}
-                              >
-                                Change
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="child-selection-prompt">
-                              <p>Please select a child from the "My Children" tab first</p>
-                              <button 
-                                className="auth-button secondary"
-                                onClick={() => {
-                                  setActiveTab('children');
-                                }}
-                              >
-                                Go to My Children
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label"><Book className="icon" /> Subject</label>
-                          <select 
-                            className="form-input" 
-                            value={bookingForm.subject} 
-                            onChange={(e) => setBookingForm({ ...bookingForm, subject: e.target.value })}
-                          >
-                            <option value="">Select a subject</option>
-                            <option value="Mathematics">Mathematics</option>
-                            <option value="Physics">Physics</option>
-                            <option value="Chemistry">Chemistry</option>
-                            <option value="Biology">Biology</option>
-                            <option value="English">English</option>
-                            <option value="History">History</option>
-                            <option value="Computer Science">Computer Science</option>
-                            <option value="Other">Other</option>
-                          </select>
-                        </div>
-                      </div>
-                      
-                      {/* Booking Summary */}
-                      {bookingForm.dateTime && bookingForm.teacherEmail && (
-                        <div className="booking-summary">
-                          <h5 className="summary-title"><FileText className="icon" /> Booking Summary</h5>
-                          <div className="summary-content">
-                            <div className="summary-item">
-                              <span className="summary-label">Teacher:</span>
-                              <span className="summary-value">
-                                {teacherList.find(t => t._id === selectedTeacher)?.firstName} {teacherList.find(t => t._id === selectedTeacher)?.lastName}
-                              </span>
-                            </div>
-                            <div className="summary-item">
-                              <span className="summary-label">Date & Time:</span>
-                              <span className="summary-value">
-                                {new Date(bookingForm.dateTime).toLocaleString()}
-                              </span>
-                            </div>
-                            <div className="summary-item">
-                              <span className="summary-label">Duration:</span>
-                              <span className="summary-value">{bookingForm.durationMinutes} minutes</span>
-                            </div>
-                            <div className="summary-item">
-                              <span className="summary-label">Subject:</span>
-                              <span className="summary-value">{bookingForm.subject || 'Not specified'}</span>
-                            </div>
-                            {bookingForm.studentEmail && (
-                              <div className="summary-item">
-                                <span className="summary-label">Student:</span>
-                                <span className="summary-value">{bookingForm.studentEmail}</span>
+                            ) : (
+                              <div className="child-selection-prompt">
+                                <p>Please select a child from the "My Children" tab first</p>
+                                <button 
+                                  className="auth-button secondary"
+                                  onClick={() => {
+                                    setActiveTab('children');
+                                  }}
+                                >
+                                  Go to My Children
+                                </button>
                               </div>
                             )}
                           </div>
+                          <div className="form-group">
+                            <label className="form-label"><Book className="icon" /> Subject</label>
+                            <select 
+                              className="form-input" 
+                              value={bookingForm.subject} 
+                              onChange={(e) => setBookingForm({ ...bookingForm, subject: e.target.value })}
+                            >
+                              <option value="">Select a subject</option>
+                              <option value="Mathematics">Mathematics</option>
+                              <option value="Physics">Physics</option>
+                              <option value="Chemistry">Chemistry</option>
+                              <option value="Biology">Biology</option>
+                              <option value="English">English</option>
+                              <option value="History">History</option>
+                              <option value="Computer Science">Computer Science</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
                         </div>
-                      )}
-                      
-                      <div className="inline-actions">
-                        <button 
-                          className="auth-button primary large" 
-                          disabled={!bookingForm.dateTime || !bookingForm.teacherEmail} 
-                          onClick={() => handleAction(async () => {
-                          await roleAPI.bookLesson({ ...bookingForm });
-                            showSuccess('Lesson booked successfully!');
-                          setAvailableSlots([]);
-                          setBookingForm({ teacherEmail: '', dateTime: '', subject: '', durationMinutes: 60, studentEmail: '' });
-                          setSelectedTeacher('');
-                          })}
-                        >
-                          <Target className="icon" /> Book This Lesson
-                        </button>
+                        
+                        {/* Booking Summary */}
+                        {bookingForm.dateTime && bookingForm.teacherEmail && (
+                          <div className="booking-summary">
+                            <h5 className="summary-title"><FileText className="icon" /> Booking Summary</h5>
+                            <div className="summary-content">
+                              <div className="summary-item">
+                                <span className="summary-label">Teacher:</span>
+                                <span className="summary-value">
+                                  {teacherList.find(t => t._id === selectedTeacher)?.firstName} {teacherList.find(t => t._id === selectedTeacher)?.lastName}
+                                </span>
+                              </div>
+                              <div className="summary-item">
+                                <span className="summary-label">Date & Time:</span>
+                                <span className="summary-value">
+                                  {new Date(bookingForm.dateTime).toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="summary-item">
+                                <span className="summary-label">Duration:</span>
+                                <span className="summary-value">{bookingForm.durationMinutes} minutes</span>
+                              </div>
+                              <div className="summary-item">
+                                <span className="summary-label">Subject:</span>
+                                <span className="summary-value">{bookingForm.subject || 'Not specified'}</span>
+                              </div>
+                              {bookingForm.studentEmail && (
+                                <div className="summary-item">
+                                  <span className="summary-label">Student:</span>
+                                  <span className="summary-value">{bookingForm.studentEmail}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="step-actions">
+                          <button 
+                            className="auth-button primary large" 
+                            disabled={!canProceedToNextStep(4)} 
+                            onClick={() => handleAction(async () => {
+                              try {
+                                // Final validation before booking
+                                const timeValidation = validateBookingTime(bookingForm.dateTime);
+                                if (!timeValidation.valid) {
+                                  showWarning(timeValidation.message);
+                                  return;
+                                }
+                                
+                                await roleAPI.bookLesson({ ...bookingForm });
+                                showSuccess('Lesson booked successfully! You will receive a confirmation email shortly.');
+                                
+                                // Reset all booking state
+                                resetBookingFlow();
+                                
+                                // Refresh parent history
+                                const historyData = await roleAPI.getParentHistory();
+                                setParentHistory(historyData.lessons || []);
+                              } catch (error) {
+                                console.error('Booking error:', error);
+                                showError('Failed to book lesson. Please try again.');
+                              }
+                            })}
+                          >
+                            <Target className="icon" /> Confirm & Book Lesson
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 ) },
                 { key: 'history', title: 'History', content: (
@@ -2419,6 +2660,49 @@ const Dashboard = () => {
                                       <div className="lesson-duration">
                                         <span className="duration-badge">{(lesson.durationMinutes || 60)} min</span>
                                       </div>
+                                      
+                                      {/* Meeting Link - Show when lesson time is live */}
+                                      {(() => {
+                                        const now = new Date();
+                                        const lessonTime = new Date(lesson.dateTime);
+                                        const timeUntilLesson = lessonTime - now;
+                                        const tenMinutesInMs = 10 * 60 * 1000;
+                                        const isLessonLive = timeUntilLesson <= tenMinutesInMs && timeUntilLesson > -60 * 60 * 1000; // 1 hour after lesson start
+                                        
+                                        if (isLessonLive && lesson.teacherMeetingLink) {
+                                          return (
+                                            <div className="lesson-meeting">
+                                              <a 
+                                                href={lesson.teacherMeetingLink} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="join-meeting-button"
+                                              >
+                                                🎥 Join Meeting
+                                              </a>
+                                            </div>
+                                          );
+                                        } else if (isLessonLive && !lesson.teacherMeetingLink) {
+                                          return (
+                                            <div className="lesson-meeting">
+                                              <button 
+                                                className="contact-teacher-button"
+                                                onClick={() => {
+                                                  // Set up contact form for this teacher
+                                                  setContactForm({ 
+                                                    teacherEmail: lesson.teacherEmail, 
+                                                    message: `Hi! I'm ready for my ${lesson.subject || 'lesson'} that's scheduled for ${new Date(lesson.dateTime).toLocaleString()}. Could you please share the meeting link?` 
+                                                  });
+                                                  setOpenModal('contact');
+                                                }}
+                                              >
+                                                📞 Contact teacher for meeting link
+                                              </button>
+                                            </div>
+                                          );
+                                        }
+                                        return null;
+                                      })()}
                                     </div>
                                   </div>
                                 );

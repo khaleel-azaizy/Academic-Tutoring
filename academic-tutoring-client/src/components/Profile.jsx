@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   UserCheck, 
   GraduationCap, 
@@ -8,8 +8,12 @@ import {
   Save, 
   X, 
   Trash2, 
-  AlertTriangle 
+  AlertTriangle,
+  BookOpen,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
+import { roleAPI } from '../services/api';
 
 const Profile = ({ user, onUpdateUser, onDeleteAccount }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -18,9 +22,95 @@ const Profile = ({ user, onUpdateUser, onDeleteAccount }) => {
     lastName: user?.lastName || '',
     email: user?.email || '',
     phoneNumber: user?.phoneNumber || '',
-    grade: user?.grade || ''
+    grade: user?.grade || '',
+    teacherMeetingLink: user?.teacherMeetingLink || ''
   });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  // Teacher specialization state
+  const [availableSubjects, setAvailableSubjects] = useState([]);
+  const [selectedSpecializations, setSelectedSpecializations] = useState(user?.specializations || []);
+  const [isEditingSpecializations, setIsEditingSpecializations] = useState(false);
+  const [specializationsLoading, setSpecializationsLoading] = useState(false);
+
+  // Load available subjects for teachers
+  useEffect(() => {
+    if (user?.role === 'Teacher') {
+      loadAvailableSubjects();
+    }
+  }, [user?.role]);
+
+  // Update selected specializations when user data changes
+  useEffect(() => {
+    setSelectedSpecializations(user?.specializations || []);
+  }, [user?.specializations]);
+
+  // Initialize user with default values if they don't exist
+  useEffect(() => {
+    if (user?.role === 'Teacher' && user?.specializations === undefined) {
+      setSelectedSpecializations([]);
+    }
+  }, [user]);
+
+  const loadAvailableSubjects = async () => {
+    // Use hardcoded subjects to ensure it works
+    const subjects = [
+      'Mathematics', 'English', 'Science', 'Physics', 'Chemistry', 'Biology',
+      'History', 'Geography', 'Computer Science', 'Art', 'Music', 'Physical Education',
+      'Spanish', 'French', 'German', 'Economics', 'Psychology', 'Sociology',
+      'Literature', 'Writing', 'Reading', 'Algebra', 'Geometry', 'Calculus',
+      'Statistics', 'Trigonometry', 'Pre-Calculus', 'World History', 'US History',
+      'Government', 'Philosophy', 'Religion', 'Environmental Science', 'Astronomy'
+    ];
+    
+    setAvailableSubjects(subjects);
+    
+    // Also try API call for future use
+    try {
+      const data = await roleAPI.getAvailableSubjects();
+      if (data.subjects && data.subjects.length > 0) {
+        setAvailableSubjects(data.subjects);
+      }
+    } catch (error) {
+      // API call failed, using hardcoded subjects
+    }
+  };
+
+  const handleSpecializationToggle = (subject) => {
+    setSelectedSpecializations(prev => {
+      if (prev.includes(subject)) {
+        return prev.filter(s => s !== subject);
+      } else {
+        return [...prev, subject];
+      }
+    });
+  };
+
+  const handleSaveSpecializations = async () => {
+    if (selectedSpecializations.length === 0) {
+      alert('Please select at least one subject to specialize in.');
+      return;
+    }
+
+    try {
+      setSpecializationsLoading(true);
+      const data = await roleAPI.updateSpecializations(selectedSpecializations);
+      
+      // Update the user object with new specializations
+      onUpdateUser({
+        ...user,
+        specializations: data.specializations,
+        isProfileComplete: data.isProfileComplete
+      });
+      
+      setIsEditingSpecializations(false);
+    } catch (error) {
+      console.error('Failed to update specializations:', error);
+      alert('Failed to update specializations. Please try again.');
+    } finally {
+      setSpecializationsLoading(false);
+    }
+  };
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -29,7 +119,8 @@ const Profile = ({ user, onUpdateUser, onDeleteAccount }) => {
       lastName: user?.lastName || '',
       email: user?.email || '',
       phoneNumber: user?.phoneNumber || '',
-      grade: user?.grade || ''
+      grade: user?.grade || '',
+      teacherMeetingLink: user?.teacherMeetingLink || ''
     });
   };
 
@@ -49,7 +140,8 @@ const Profile = ({ user, onUpdateUser, onDeleteAccount }) => {
       lastName: user?.lastName || '',
       email: user?.email || '',
       phoneNumber: user?.phoneNumber || '',
-      grade: user?.grade || ''
+      grade: user?.grade || '',
+      teacherMeetingLink: user?.teacherMeetingLink || ''
     });
   };
 
@@ -161,6 +253,20 @@ const Profile = ({ user, onUpdateUser, onDeleteAccount }) => {
                 </div>
               )}
               
+              {user?.role === 'Teacher' && (
+                <div className="form-group">
+                  <label>Meeting Link</label>
+                  <input
+                    type="url"
+                    value={editForm.teacherMeetingLink}
+                    onChange={(e) => setEditForm({ ...editForm, teacherMeetingLink: e.target.value })}
+                    className="form-input"
+                    placeholder="https://zoom.us/j/your-room-id"
+                  />
+                  <small className="form-help">Your personal meeting room link (Zoom, Google Meet, etc.)</small>
+                </div>
+              )}
+              
               <div className="form-actions">
                 <button className="save-button" onClick={handleSave}>
                   <span className="save-icon"><Save size={16} /></span>
@@ -207,6 +313,17 @@ const Profile = ({ user, onUpdateUser, onDeleteAccount }) => {
                 </div>
               )}
               
+              {user?.role === 'Teacher' && user?.teacherMeetingLink && (
+                <div className="detail-item">
+                  <label>Meeting Link</label>
+                  <div className="detail-value">
+                    <a href={user.teacherMeetingLink} target="_blank" rel="noopener noreferrer" className="meeting-link">
+                      {user.teacherMeetingLink}
+                    </a>
+                  </div>
+                </div>
+              )}
+              
               <div className="detail-item">
                 <label>Member Since</label>
                 <div className="detail-value">
@@ -220,6 +337,97 @@ const Profile = ({ user, onUpdateUser, onDeleteAccount }) => {
             </div>
           )}
         </div>
+
+        {/* Teacher Specializations Section */}
+        {user?.role === 'Teacher' && (
+          <div className="profile-specializations">
+            <div className="specializations-header">
+              <h2>Teaching Specializations</h2>
+              {!user?.isProfileComplete && (
+                <div className="profile-incomplete-warning">
+                  <AlertCircle size={16} />
+                  <span>Complete your profile to appear in parent searches</span>
+                </div>
+              )}
+              {user?.isProfileComplete && (
+                <div className="profile-complete-indicator">
+                  <CheckCircle size={16} />
+                  <span>Profile complete - visible to parents</span>
+                </div>
+              )}
+            </div>
+            
+            
+            {isEditingSpecializations ? (
+              <div className="specializations-edit">
+                <div className="subjects-grid">
+                  {availableSubjects.length === 0 ? (
+                    <div className="loading-subjects">
+                      <p>Loading subjects...</p>
+                    </div>
+                  ) : (
+                    availableSubjects.map(subject => (
+                      <label key={subject} className="subject-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={selectedSpecializations.includes(subject)}
+                          onChange={() => handleSpecializationToggle(subject)}
+                        />
+                        <span className="subject-label">{subject}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <div className="specializations-actions">
+                  <button 
+                    className="save-button" 
+                    onClick={handleSaveSpecializations}
+                    disabled={specializationsLoading}
+                  >
+                    <span className="save-icon"><Save size={16} /></span>
+                    {specializationsLoading ? 'Saving...' : 'Save Specializations'}
+                  </button>
+                  <button 
+                    className="cancel-button" 
+                    onClick={() => {
+                      setIsEditingSpecializations(false);
+                      setSelectedSpecializations(user?.specializations || []);
+                    }}
+                  >
+                    <span className="cancel-icon"><X size={16} /></span>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="specializations-display">
+                {user?.specializations && user.specializations.length > 0 ? (
+                  <div className="specializations-list">
+                    {user.specializations.map(specialization => (
+                      <span key={specialization} className="specialization-tag">
+                        <BookOpen size={14} />
+                        {specialization}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="no-specializations">
+                    <BookOpen size={24} />
+                    <p>No specializations selected</p>
+                    <small>Select subjects you can teach to appear in parent searches</small>
+                  </div>
+                )}
+                <button 
+                  className="edit-specializations-button"
+                  onClick={() => setIsEditingSpecializations(true)}
+                >
+                  <span className="edit-icon"><Edit3 size={16} /></span>
+                  {user?.specializations && user.specializations.length > 0 ? 'Edit Specializations' : 'Add Specializations'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="profile-actions">
           <button className="delete-account-button" onClick={() => setShowDeleteConfirm(true)}>

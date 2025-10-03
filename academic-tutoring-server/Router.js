@@ -63,7 +63,10 @@ app.post('/api/register', async (req, res) => {
       role,
       phoneNumber: phoneNumber || null,
       createdAt: new Date(),
-      isActive: true
+      isActive: true,
+      // Teacher-specific fields
+      specializations: role === 'Teacher' ? [] : undefined,
+      isProfileComplete: role === 'Teacher' ? false : true
     };
 
     // Insert user into database
@@ -201,11 +204,42 @@ const authenticateToken = async (req, res, next) => {
 };
 
 // Protected route example - Get user profile
-app.get('/api/profile', authenticateToken, (req, res) => {
-  res.json({
-    message: 'פרופיל המשתמש',
-    user: req.user
-  });
+app.get('/api/profile', authenticateToken, async (req, res) => {
+  try {
+    // Ensure teacher has required fields
+    if (req.user.role === 'Teacher') {
+      const updateData = {};
+      
+      // Add specializations field if it doesn't exist
+      if (req.user.specializations === undefined) {
+        updateData.specializations = [];
+      }
+      
+      // Add isProfileComplete field if it doesn't exist
+      if (req.user.isProfileComplete === undefined) {
+        updateData.isProfileComplete = false;
+      }
+      
+      // Update user if needed
+      if (Object.keys(updateData).length > 0) {
+        await db.collection('users').updateOne(
+          { _id: new ObjectId(req.user._id) },
+          { $set: updateData }
+        );
+        
+        // Update the user object
+        Object.assign(req.user, updateData);
+      }
+    }
+    
+    res.json({
+      message: 'פרופיל המשתמש',
+      user: req.user
+    });
+  } catch (error) {
+    console.error('Profile fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
 });
 
 // Role-based authorization middleware
@@ -499,11 +533,15 @@ app.get('/api/teacher/schedule', authenticateToken, authorizeRole('Teacher'), as
 // Parent Actions Endpoints
 // =========================
 
-// Get all teachers
+// Get all teachers (only those with complete profiles)
 app.get('/api/teachers', authenticateToken, async (req, res) => {
   try {
     const teachers = await db.collection('users').find(
-      { role: 'Teacher' },
+      { 
+        role: 'Teacher',
+        isProfileComplete: true,
+        isActive: true
+      },
       { projection: { password: 0 } }
     ).limit(100).toArray();
     return res.json({ teachers });
@@ -513,19 +551,32 @@ app.get('/api/teachers', authenticateToken, async (req, res) => {
   }
 });
 
-// Search teachers
+// Search teachers (only those with complete profiles)
 app.get('/api/teachers/search', authenticateToken, async (req, res) => {
   try {
     const q = (req.query.q || '').toString().trim();
-    const filter = { role: 'Teacher' };
+    const subject = req.query.subject || '';
+    
+    const filter = { 
+      role: 'Teacher',
+      isProfileComplete: true,
+      isActive: true
+    };
+    
     if (q) {
       const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       filter.$or = [
         { firstName: { $regex: regex } },
         { lastName: { $regex: regex } },
-        { email: { $regex: regex } }
+        { email: { $regex: regex } },
+        { specializations: { $regex: regex } }
       ];
     }
+    
+    if (subject) {
+      filter.specializations = { $in: [subject] };
+    }
+    
     const teachers = await db.collection('users').find(filter, {
       projection: { password: 0 }
     }).limit(50).toArray();
@@ -668,6 +719,7 @@ app.post('/api/bookings', authenticateToken, authorizeRole('Parent'), async (req
       studentId: studentId ? new ObjectId(studentId) : null,
       teacherEmail: teacher.email,
       teacherName: `${teacher.firstName || ''} ${teacher.lastName || ''}`.trim(),
+      teacherMeetingLink: teacher.teacherMeetingLink || null,
       dateTime: new Date(dateTime),
       subject: subject || '',
       durationMinutes: typeof durationMinutes === 'number' && durationMinutes > 0 ? durationMinutes : 60,
@@ -685,6 +737,18 @@ app.post('/api/bookings', authenticateToken, authorizeRole('Parent'), async (req
         read: false,
         createdAt: new Date()
       });
+      
+      // If teacher doesn't have a meeting link, remind them to add one
+      if (!teacher.teacherMeetingLink) {
+        await db.collection('notifications').insertOne({
+          userId: new ObjectId(teacher._id),
+          type: 'meeting_link_reminder',
+          message: `Don't forget to add your meeting link for the lesson on ${new Date(dateTime).toLocaleString()}`,
+          lessonId: new ObjectId(result.insertedId),
+          read: false,
+          createdAt: new Date()
+        });
+      }
     } catch (e) {
       console.error('Notification insert failed (booking):', e);
     }
@@ -1308,6 +1372,105 @@ app.post('/api/teacher/notifications/mark-all-read', authenticateToken, authoriz
   } catch (error) {
     console.error('Notifications mark read error:', error);
     return res.status(500).json({ error: 'Failed to mark notifications' });
+  }
+});
+
+// Update teacher meeting link
+app.put('/api/teacher/meeting-link', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
+  try {
+    const { meetingLink } = req.body || {};
+    if (!meetingLink || typeof meetingLink !== 'string') {
+      return res.status(400).json({ error: 'Valid meeting link is required' });
+    }
+
+    // Basic URL validation
+    try {
+      new URL(meetingLink);
+    } catch {
+      return res.status(400).json({ error: 'Please provide a valid URL for your meeting link' });
+    }
+
+    await db.collection('users').updateOne(
+      { _id: new ObjectId(req.user._id) },
+      { $set: { teacherMeetingLink: meetingLink, updatedAt: new Date() } }
+    );
+
+    return res.json({ message: 'Meeting link updated successfully' });
+  } catch (error) {
+    console.error('Update meeting link error:', error);
+    return res.status(500).json({ error: 'Failed to update meeting link' });
+  }
+});
+
+// Update teacher specializations
+app.put('/api/teacher/specializations', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
+  try {
+    const { specializations } = req.body || {};
+    
+    if (!Array.isArray(specializations)) {
+      return res.status(400).json({ error: 'Specializations must be an array' });
+    }
+
+    // Validate specializations against predefined list
+    const validSubjects = [
+      'Mathematics', 'English', 'Science', 'Physics', 'Chemistry', 'Biology',
+      'History', 'Geography', 'Computer Science', 'Art', 'Music', 'Physical Education',
+      'Spanish', 'French', 'German', 'Economics', 'Psychology', 'Sociology',
+      'Literature', 'Writing', 'Reading', 'Algebra', 'Geometry', 'Calculus',
+      'Statistics', 'Trigonometry', 'Pre-Calculus', 'World History', 'US History',
+      'Government', 'Philosophy', 'Religion', 'Environmental Science', 'Astronomy'
+    ];
+
+    const invalidSubjects = specializations.filter(subject => !validSubjects.includes(subject));
+    if (invalidSubjects.length > 0) {
+      return res.status(400).json({ 
+        error: `Invalid subjects: ${invalidSubjects.join(', ')}. Please select from the available subjects.` 
+      });
+    }
+
+    if (specializations.length === 0) {
+      return res.status(400).json({ error: 'At least one specialization is required' });
+    }
+
+    // Update specializations and mark profile as complete
+    await db.collection('users').updateOne(
+      { _id: new ObjectId(req.user._id) },
+      { 
+        $set: { 
+          specializations: specializations,
+          isProfileComplete: true,
+          updatedAt: new Date() 
+        } 
+      }
+    );
+
+    return res.json({ 
+      message: 'Specializations updated successfully',
+      specializations: specializations,
+      isProfileComplete: true
+    });
+  } catch (error) {
+    console.error('Update specializations error:', error);
+    return res.status(500).json({ error: 'Failed to update specializations' });
+  }
+});
+
+// Get available subjects for teacher specialization
+app.get('/api/teacher/subjects', authenticateToken, authorizeRole('Teacher'), (req, res) => {
+  try {
+    const subjects = [
+      'Mathematics', 'English', 'Science', 'Physics', 'Chemistry', 'Biology',
+      'History', 'Geography', 'Computer Science', 'Art', 'Music', 'Physical Education',
+      'Spanish', 'French', 'German', 'Economics', 'Psychology', 'Sociology',
+      'Literature', 'Writing', 'Reading', 'Algebra', 'Geometry', 'Calculus',
+      'Statistics', 'Trigonometry', 'Pre-Calculus', 'World History', 'US History',
+      'Government', 'Philosophy', 'Religion', 'Environmental Science', 'Astronomy'
+    ];
+    
+    return res.json({ subjects });
+  } catch (error) {
+    console.error('Get subjects error:', error);
+    return res.status(500).json({ error: 'Failed to get subjects' });
   }
 });
 

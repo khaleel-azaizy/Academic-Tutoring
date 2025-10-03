@@ -249,6 +249,30 @@ export const roleAPI = {
       throw error.response?.data || error.message;
     }
   },
+  updateMeetingLink: async (meetingLink) => {
+    try {
+      const res = await api.put('/teacher/meeting-link', { meetingLink });
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  updateSpecializations: async (specializations) => {
+    try {
+      const res = await api.put('/teacher/specializations', { specializations });
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  getAvailableSubjects: async () => {
+    try {
+      const res = await api.get('/teacher/subjects');
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
 
   // Parent
   getAllTeachers: async () => {
@@ -259,9 +283,9 @@ export const roleAPI = {
       throw error.response?.data || error.message;
     }
   },
-  searchTeachers: async (q) => {
+  searchTeachers: async (q, subject = '') => {
     try {
-      const res = await api.get('/teachers/search', { params: { q } });
+      const res = await api.get('/teachers/search', { params: { q, subject } });
       return res.data;
     } catch (error) {
       throw error.response?.data || error.message;
