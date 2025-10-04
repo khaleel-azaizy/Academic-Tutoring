@@ -4,7 +4,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--gradient-primary);
   padding: 40px;
   width: 100vw;
   box-sizing: border-box;
@@ -130,7 +130,7 @@
   transition: all 0.3s ease;
   margin-top: 0;
   min-height: 48px;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 15px rgba(var(--accent-primary-rgb), 0.35);
 }
 
 .auth-button.login-button::before {
@@ -150,19 +150,19 @@
 
 .auth-button.login-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 8px 25px rgba(var(--accent-primary-rgb), 0.45);
 }
 
 .auth-button.login-button:active {
   transform: translateY(0);
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 15px rgba(var(--accent-primary-rgb), 0.35);
 }
 
 .auth-button.login-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 15px rgba(var(--accent-primary-rgb), 0.25);
 }
 
 /* Two-column layout for signup form */
@@ -277,7 +277,7 @@
   background: var(--gradient-primary);
   color: white;
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 6px 20px rgba(var(--accent-primary-rgb), 0.35);
 }
 
 .form-group {
@@ -309,7 +309,7 @@
 .form-input:focus {
   outline: none;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+  box-shadow: 0 0 0 4px rgba(var(--accent-primary-rgb), 0.18);
   transform: translateY(-1px);
 }
 
@@ -320,7 +320,7 @@
 /* Enhanced input focus for login form */
 .auth-form.login-form .form-input:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.28);
   transform: translateY(-2px);
 }
 
@@ -417,7 +417,7 @@
 
 .auth-button:hover {
   transform: translateY(-3px);
-  box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 15px 35px rgba(var(--accent-primary-rgb), 0.45);
 }
 
 .auth-button:disabled {

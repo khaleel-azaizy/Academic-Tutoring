@@ -18,7 +18,7 @@ import { useTheme } from '../contexts/ThemeContext';
 
 const Header = ({ user, onLogout, onProfile, onBackToDashboard, notifications = [], onMarkAllRead, onMessages, onAIChat, currentView = 'dashboard' }) => {
   const [unreadCount, setUnreadCount] = useState(0);
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const { isDarkMode, toggleTheme } = useTheme();
   const [openDropdown, setOpenDropdown] = useState(null); // 'notifications'
 

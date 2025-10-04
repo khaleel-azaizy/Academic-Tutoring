@@ -31,6 +31,8 @@ import {
   ArrowRight,
   Loader2
 } from 'lucide-react';
+// Added Video icon for meeting link access in student upcoming lessons
+import { Video } from 'lucide-react';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -95,8 +97,8 @@ const Dashboard = () => {
   const [hoveredLesson, setHoveredLesson] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   
-  // Week navigation state
-  const [weekOffset, setWeekOffset] = useState(0);
+  // Month navigation state (0 = current month, -1 = previous, +1 = next, etc.)
+  const [monthOffset, setMonthOffset] = useState(0);
   
 
   // Student action state
@@ -565,18 +567,10 @@ const Dashboard = () => {
     setHoveredLesson(null);
   };
 
-  // Week navigation functions
-  const goToPreviousWeek = () => {
-    setWeekOffset(prev => prev - 1);
-  };
-
-  const goToNextWeek = () => {
-    setWeekOffset(prev => prev + 1);
-  };
-
-  const goToCurrentWeek = () => {
-    setWeekOffset(0);
-  };
+  // Month navigation functions
+  const goToPreviousMonth = () => setMonthOffset(prev => prev - 1);
+  const goToNextMonth = () => setMonthOffset(prev => prev + 1);
+  const goToCurrentMonth = () => setMonthOffset(0);
 
   // Admin functions
   const loadAdminStats = async () => {
@@ -1586,21 +1580,25 @@ const Dashboard = () => {
                           </div>
                           <div className="form-group">
                             <label className="form-label"><Book className="icon" /> Subject</label>
-                            <select 
-                              className="form-input" 
-                              value={bookingForm.subject} 
-                              onChange={(e) => setBookingForm({ ...bookingForm, subject: e.target.value })}
-                            >
-                              <option value="">Select a subject</option>
-                              <option value="Mathematics">Mathematics</option>
-                              <option value="Physics">Physics</option>
-                              <option value="Chemistry">Chemistry</option>
-                              <option value="Biology">Biology</option>
-                              <option value="English">English</option>
-                              <option value="History">History</option>
-                              <option value="Computer Science">Computer Science</option>
-                              <option value="Other">Other</option>
-                            </select>
+                            <div className="selected-child-display">
+                              <div className="selected-child-info">
+                                <div className="selected-child-details">
+                                  <div className="selected-child-name">
+                                    {bookingForm.subject || selectedSubject}
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="change-child-btn"
+                                onClick={() => {
+                                  // Allow user to change subject by returning to step 1
+                                  setBookingStep(1);
+                                }}
+                              >
+                                Change
+                              </button>
+                            </div>
                           </div>
                         </div>
                         
@@ -2499,235 +2497,134 @@ const Dashboard = () => {
                   <div className="grid-one">
               <p className="muted">All your scheduled upcoming lessons. Interacts: Parents (who booked), Teachers (who teach).</p>
                     {upcoming.length > 0 ? (
-                <div className="weekly-calendar-container">
+                <div className="monthly-calendar-container">
                   <div className="lessons-header">
                     <span className="lessons-count">{upcoming.length} upcoming lesson{upcoming.length !== 1 ? 's' : ''}</span>
-                            </div>
-                  
-                  <div className="week-navigation">
-                    <button 
-                      className="nav-button prev-week" 
-                      onClick={goToPreviousWeek}
-                      title="Previous Week"
-                    >
-                      ←
-                    </button>
-                    <button 
-                      className="nav-button current-week" 
-                      onClick={goToCurrentWeek}
-                      title="Current Week"
-                    >
-                      Today
-                    </button>
-                    <button 
-                      className="nav-button next-week" 
-                      onClick={goToNextWeek}
-                      title="Next Week"
-                    >
-                      →
-                    </button>
-                          </div>
-                  
+                  </div>
+                  <div className="month-navigation">
+                    <button className="nav-button prev-month" onClick={goToPreviousMonth} title="Previous Month">←</button>
+                    <button className="nav-button current-month" onClick={goToCurrentMonth} title="Current Month">Today</button>
+                    <button className="nav-button next-month" onClick={goToNextMonth} title="Next Month">→</button>
+                  </div>
                   {(() => {
-                    // Calculate current week based on offset
-                    const currentDate = new Date();
-                    const targetDate = new Date(currentDate);
-                    targetDate.setDate(currentDate.getDate() + (weekOffset * 7));
+                    const now = new Date();
+                    const firstOfTarget = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+                    const year = firstOfTarget.getFullYear();
+                    const month = firstOfTarget.getMonth();
+                    const monthStart = new Date(year, month, 1);
+                    const monthEnd = new Date(year, month + 1, 0); // last day
+                    const daysInMonth = monthEnd.getDate();
+                    const startWeekday = monthStart.getDay(); // 0=Sun
                     
-                    // Get start of target week (Sunday)
-                    const weekStart = new Date(targetDate);
-                    weekStart.setDate(targetDate.getDate() - targetDate.getDay());
-                    weekStart.setHours(0, 0, 0, 0);
-                    
-                    // Get end of target week (Saturday)
-                    const weekEnd = new Date(weekStart);
-                    weekEnd.setDate(weekStart.getDate() + 6);
-                    weekEnd.setHours(23, 59, 59, 999);
-                    
-                    // Filter lessons for current week
-                    const currentWeekLessons = upcoming.filter(lesson => {
-                      const lessonDate = new Date(lesson.dateTime);
-                      return lessonDate >= weekStart && lessonDate <= weekEnd;
+                    // Collect lessons in this month range
+                    const monthLessons = upcoming.filter(lesson => {
+                      const d = new Date(lesson.dateTime);
+                      return d >= monthStart && d <= monthEnd;
                     });
                     
-                    // Group lessons by days within the week
-                    const dayGroups = currentWeekLessons.reduce((days, lesson) => {
-                      const lessonDate = new Date(lesson.dateTime);
-                      const dayKey = lessonDate.toDateString();
-                      
-                      if (!days[dayKey]) {
-                        days[dayKey] = {
-                          date: lessonDate,
-                          lessons: []
-                        };
-                      }
-                      
-                      days[dayKey].lessons.push(lesson);
-                      return days;
+                    // Map date string -> lessons
+                    const lessonMap = monthLessons.reduce((acc, lesson) => {
+                      const key = new Date(lesson.dateTime).toDateString();
+                      (acc[key] = acc[key] || []).push(lesson);
+                      return acc;
                     }, {});
                     
-                    // Create all 7 days of the week
-                    const allDays = [];
-                    for (let i = 0; i < 7; i++) {
-                      const dayDate = new Date(weekStart);
-                      dayDate.setDate(weekStart.getDate() + i);
-                      allDays.push({
-                        date: dayDate,
-                        lessons: []
-                      });
+                    const cells = [];
+                    // Leading days from previous month to fill first week
+                    for (let i = 0; i < startWeekday; i++) {
+                      const date = new Date(year, month, 1 - (startWeekday - i));
+                      cells.push({ date, lessons: lessonMap[date.toDateString()] || [], other: true });
+                    }
+                    // Current month days
+                    for (let day = 1; day <= daysInMonth; day++) {
+                      const date = new Date(year, month, day);
+                      cells.push({ date, lessons: lessonMap[date.toDateString()] || [], other: false });
+                    }
+                    // Trailing days to complete 42 cells (6 weeks * 7)
+                    while (cells.length % 7 !== 0) {
+                      const last = cells[cells.length - 1].date;
+                      const next = new Date(last);
+                      next.setDate(last.getDate() + 1);
+                      cells.push({ date: next, lessons: lessonMap[next.toDateString()] || [], other: true });
+                    }
+                    // Ensure 6 rows for consistent height
+                    while (cells.length < 42) {
+                      const last = cells[cells.length - 1].date;
+                      const next = new Date(last);
+                      next.setDate(last.getDate() + 1);
+                      cells.push({ date: next, lessons: lessonMap[next.toDateString()] || [], other: true });
                     }
                     
-                    // Merge lessons into the complete week structure
-                    const completeWeek = allDays.map(day => {
-                      const dayKey = day.date.toDateString();
-                      const hasLessons = dayGroups[dayKey];
-                      return {
-                        date: day.date,
-                        lessons: hasLessons ? hasLessons.lessons : []
-                      };
-                    });
-                    
                     return (
-                      <div className="week-container">
-                        <div className="week-header">
-                          <h4 className="week-title">
-                            Week of {weekStart.toLocaleDateString('en-US', { 
-                              month: 'short', 
-                              day: 'numeric' 
-                            })} - {weekEnd.toLocaleDateString('en-US', { 
-                              month: 'short', 
-                              day: 'numeric',
-                              year: 'numeric'
-                            })}
-                          </h4>
-                          <span className="week-lesson-count">{currentWeekLessons.length} lesson{currentWeekLessons.length !== 1 ? 's' : ''}</span>
-                      </div>
-                        
-                        <div className="week-grid">
-                          {completeWeek.map((day, dayIndex) => {
-                              const isToday = day.date.toDateString() === new Date().toDateString();
-                              const isTomorrow = day.date.toDateString() === new Date(Date.now() + 86400000).toDateString();
-                              
-                              return (
-                                <div key={dayIndex} className={`day-container ${isToday ? 'today' : ''} ${isTomorrow ? 'tomorrow' : ''}`}>
-                                  <div className="day-header">
-                                    <div className="day-name">
-                                      {day.date.toLocaleDateString('en-US', { weekday: 'long' })}
-                      </div>
-                                    <div className="day-date">
-                                      {day.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                    </div>
-                                  </div>
-                                  {(isToday || isTomorrow) && (
-                                    <div className="day-badge">
-                                      {isToday ? 'Today' : 'Tomorrow'}
-                                    </div>
-                                  )}
-                                  
-                                  <div className="day-lessons">
-                            {day.lessons.length > 0 ? (
-                              day.lessons.map((lesson, lessonIndex) => {
-                                const lessonTime = new Date(lesson.dateTime);
-                                
-                                return (
-                                  <div 
-                                    key={lessonIndex} 
-                                    className="lesson-item"
-                                    onMouseEnter={(e) => handleLessonHover(lesson, e)}
-                                    onMouseLeave={handleLessonLeave}
-                                    onMouseMove={(e) => setTooltipPosition({ x: e.clientX, y: e.clientY })}
-                                  >
-                                    <div className="lesson-item-header">
-                                      <div className="lesson-time-badge">
-                                        {lessonTime.toLocaleTimeString('en-US', { 
-                                          hour: '2-digit', 
-                                          minute: '2-digit',
-                                          hour12: true 
-                                        })}
-                                      </div>
-                                      <div className="lesson-status-indicator">
-                                        {lesson.status === 'booked' ? <FileText className="icon" /> : 
-                                         lesson.status === 'in_progress' ? <RotateCcw className="icon" /> :
-                                         lesson.status === 'completed' ? <CheckCircle className="icon" /> : <Calendar className="icon" />}
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="lesson-content">
-                                      <div className="lesson-subject">
-                                        {lesson.subject || 'General Lesson'}
-                                      </div>
-                                      
-                                      <div className="lesson-duration">
-                                        <span className="duration-badge">{(lesson.durationMinutes || 60)} min</span>
-                                      </div>
-                                      
-                                      {/* Meeting Link - Show when lesson time is live */}
-                                      {(() => {
-                                        const now = new Date();
-                                        const lessonTime = new Date(lesson.dateTime);
-                                        const timeUntilLesson = lessonTime - now;
-                                        const tenMinutesInMs = 10 * 60 * 1000;
-                                        const isLessonLive = timeUntilLesson <= tenMinutesInMs && timeUntilLesson > -60 * 60 * 1000; // 1 hour after lesson start
-                                        
-                                        if (isLessonLive && lesson.teacherMeetingLink) {
-                                          return (
-                                            <div className="lesson-meeting">
-                                              <a 
-                                                href={lesson.teacherMeetingLink} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="join-meeting-button"
-                                              >
-                                                🎥 Join Meeting
-                                              </a>
-                                            </div>
-                                          );
-                                        } else if (isLessonLive && !lesson.teacherMeetingLink) {
-                                          return (
-                                            <div className="lesson-meeting">
-                                              <button 
-                                                className="contact-teacher-button"
-                                                onClick={() => {
-                                                  // Set up contact form for this teacher
-                                                  setContactForm({ 
-                                                    teacherEmail: lesson.teacherEmail, 
-                                                    message: `Hi! I'm ready for my ${lesson.subject || 'lesson'} that's scheduled for ${new Date(lesson.dateTime).toLocaleString()}. Could you please share the meeting link?` 
-                                                  });
-                                                  setOpenModal('contact');
-                                                }}
-                                              >
-                                                📞 Contact teacher for meeting link
-                                              </button>
-                                            </div>
-                                          );
-                                        }
-                                        return null;
-                                      })()}
-                                    </div>
-                                  </div>
-                                );
-                              })
-                                    ) : (
-                                      <div className="empty-day">
-                                        <div className="empty-day-icon"><Calendar className="icon" /></div>
-                                        <div className="empty-day-text">No lessons</div>
-                                      </div>
-                    )}
-                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                      <div className="month-container">
+                        <div className="month-header">
+                          <h4 className="month-title">{firstOfTarget.toLocaleString('en-US', { month: 'long', year: 'numeric' })}</h4>
+                          <span className="month-lesson-count">{monthLessons.length} lesson{monthLessons.length !== 1 ? 's' : ''}</span>
                         </div>
-                      );
-                    })()}
+                        <div className="month-weekdays">
+                          {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => <div key={d} className="weekday-cell">{d}</div>)}
+                        </div>
+                        <div className="month-grid">
+                          {cells.map((cell, idx) => {
+                            const isToday = cell.date.toDateString() === new Date().toDateString();
+                            const classes = ['month-day'];
+                            if (cell.other) classes.push('other-month');
+                            if (isToday) classes.push('today');
+                            if (cell.lessons.length > 0) classes.push('has-lessons');
+                            return (
+                              <div key={idx} className={classes.join(' ')}>
+                                <div className="day-number">{cell.date.getDate()}</div>
+                                {cell.lessons.length > 0 && (
+                                  <div className="day-lesson-count-bubble" title={`${cell.lessons.length} lesson${cell.lessons.length!==1?'s':''}`}> 
+                                    {cell.lessons.length}
+                                  </div>
+                                )}
+                                <div className="day-lessons-mini">
+                                  {cell.lessons.slice(0,3).map((lesson, li) => {
+                                    const lessonTime = new Date(lesson.dateTime);
+                                    return (
+                                      <div
+                                        key={li}
+                                        className={`mini-lesson-badge status-${lesson.status}`}
+                                        onMouseEnter={(e) => handleLessonHover(lesson, e)}
+                                        onMouseLeave={handleLessonLeave}
+                                        onMouseMove={(e) => setTooltipPosition({ x: e.clientX, y: e.clientY })}
+                                      >
+                                        <span className="mini-lesson-time">{lessonTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+                                        <span className="mini-lesson-subject">{lesson.subject || 'Lesson'}</span>
+                                        {lesson.teacherMeetingLink && (
+                                          <a
+                                            href={lesson.teacherMeetingLink}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="mini-meeting-link"
+                                            title="Open meeting link"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <Video className="icon" />
+                                          </a>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                  {cell.lessons.length > 3 && (
+                                    <div className="more-lessons-badge">+{cell.lessons.length - 3} more</div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
+                    );
+                  })()}
+                </div>
                     ) : (
                 <div className="no-lessons">
                   <div className="no-lessons-icon"><BookOpen className="icon" /></div>
-                  <h4>No upcoming lessons this week</h4>
+                  <h4>No upcoming lessons this month</h4>
                   <p className="muted">
-                    Your weekly calendar is empty. Your parents can book lessons for you, or you can explore available teachers.
+                    Your monthly calendar is empty. Your parents can book lessons for you, or you can explore available teachers.
                   </p>
                 </div>
                     )}
@@ -2880,17 +2777,14 @@ const Dashboard = () => {
           <input type="datetime-local" className="form-input" value={bookingForm.dateTime} onChange={(e) => setBookingForm({ ...bookingForm, dateTime: e.target.value })} />
         </div>
         <div className="form-group">
-          <label className="form-label">Subject</label>
-          <input className="form-input" value={bookingForm.subject} onChange={(e) => setBookingForm({ ...bookingForm, subject: e.target.value })} />
-        </div>
-        <div className="form-group">
           <label className="form-label">Duration (minutes)</label>
           <input type="number" className="form-input" value={bookingForm.durationMinutes} onChange={(e) => setBookingForm({ ...bookingForm, durationMinutes: Number(e.target.value) })} />
         </div>
         <button className="auth-button" onClick={() => handleAction(async () => {
-          await roleAPI.bookLesson({ ...bookingForm });
+          // Ensure subject is the one chosen in step 1
+          await roleAPI.bookLesson({ ...bookingForm, subject: selectedSubject });
           showSuccess('Lesson booked');
-          setBookingForm({ teacherEmail: '', dateTime: '', subject: '', durationMinutes: 60, studentEmail: '' });
+          setBookingForm({ teacherEmail: '', dateTime: '', subject: selectedSubject, durationMinutes: 60, studentEmail: '' });
           setOpenModal(null);
         })}>Book</button>
       </Modal>
