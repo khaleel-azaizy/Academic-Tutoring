@@ -71,7 +71,7 @@
 }
 
 .step-actions .auth-button {
-  min-width: 180px;
+  min-width: 60px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -270,7 +270,7 @@
 }
 
 .no-lessons-actions .auth-button {
-  min-width: 140px;
+  min-width: 80px;
 }
 
 /* Teacher Dashboard Styles */
@@ -857,7 +857,6 @@
   background: var(--bg-card);
   border-radius: 12px;
   box-shadow: 0 10px 40px rgba(0,0,0,0.15);
-  min-width: 240px;
   max-height: 400px;
   overflow: hidden;
   z-index: 1100;
@@ -2366,7 +2365,7 @@
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
   flex: 1;
-  min-width: 200px;
+  
   justify-content: center;
 }
 
@@ -4053,7 +4052,13 @@ body {
   text-align: center;
   padding: 20px;
 }
-
+.cancel-lesson-confirm .modal-actions{
+  width: 100%;
+}
+.cancel-lesson-confirm .auth-button{
+  min-width: unset;
+  max-width: 200px;
+}
 .warning-icon {
   font-size: 3rem;
   margin-bottom: 1rem;
