@@ -1,293 +1,198 @@
 # Academic Tutoring Platform
 
-A comprehensive educational platform with AI-powered tutoring capabilities built with React and Node.js.
+A full‑stack educational platform with AI‑powered tutoring, multi‑role access (Student / Teacher / Parent), lesson scheduling, messaging, and a themable modern UI (now supporting a green palette + dark mode).
 
-## Features
+## � Core Feature Set
 
-### 🔐 Authentication System
-- Role-based access (Teacher, Student, Parent)
-- JWT token authentication
-- Secure password hashing with bcrypt
+### Authentication & Roles
+- Secure JWT auth (HTTP‑only cookie friendly architecture)
+- Roles: Student, Teacher, Parent (with child management) + (Admin if enabled)
+- Password hashing (bcrypt)
 
-### 👥 User Management
-- Student registration and profile management
-- Teacher profile with subject specialization
-- Parent accounts with child management
+### Lesson & Scheduling
+- Parent → Teacher booking workflow (multi‑step with availability)
+- Student monthly calendar (with meeting link indicators)
+- Time constraints / availability management (teachers)
+- Lesson status tracking (booked / in_progress / completed / cancelled)
 
-### 📚 Lesson Booking System
-- Browse and book lessons with teachers
-- Real-time availability checking
-- Lesson history and management
+### AI Tutoring Assistant
+- Subject context (Math, Science, English, History, Computer Science, General)
+- Concept explanation, study plan generation, quiz creation, homework help
+- (Planned) Adaptive difficulty & usage budgeting
 
-### 🤖 AI Tutoring Assistant
-- GPT-powered educational support
-- Subject-specific tutoring (Math, Science, English, History, Computer Science)
-- Study plan generation
-- Quiz creation and practice
-- Homework help and explanations
-
-### 💬 Communication
-- Real-time messaging between users
+### Communication & Engagement
+- Real-time style messaging (teacher ↔ student/parent channels)
 - Notifications system
-- AI chat interface
+- Contact teacher quick action for missing meeting link
 
-## Technology Stack
+### Admin / Operational Tools
+- User management, activity logs
+- Salary / hours reporting per teacher (if enabled)
+- Rate editing & reporting
 
-### Frontend
-- **React 18** - Modern React with hooks
-- **Vite** - Fast build tool and development server
-- **React Router** - Client-side routing
-- **Axios** - HTTP client for API calls
-- **Lucide React** - Modern icon library
+### UI / UX Enhancements
+- Responsive layout with collapsible sidebar
+- Dark / light theme + green accent gradient
+- Accessible focus states & keyboard navigation (ongoing improvements)
 
-### Backend
-- **Node.js** - JavaScript runtime
-- **Express.js** - Web framework
-- **MongoDB** - NoSQL database
-- **Mongoose** - MongoDB object modeling
-- **JWT** - JSON Web Tokens for authentication
-- **bcrypt** - Password hashing
-- **OpenAI API** - AI tutoring capabilities
+## 🧠 AI Roadmap Snapshot
+Phased approach (from original AI integration plan):
+| Phase | Delivered / Planned | Highlights |
+|-------|--------------------|------------|
+| 1 | ✅ Tutor Chat | Q&A, study plans, quizzes, explanations |
+| 2 | ⏳ Teacher/Parent Insights | Progress analysis, lesson plan generator |
+| 3 | 🔭 Voice & Vision | Voice Q&A, handwriting / math OCR |
 
-## Setup Instructions
+Recommended next AI tasks: cost usage dashboard, adaptive quiz difficulty, student progress summarizer.
 
-### Prerequisites
-- Node.js (v18 or higher)
-- MongoDB (local or cloud instance)
-- OpenAI API key (for AI features)
-
-### Backend Setup
-
-1. Navigate to the server directory:
-```bash
-cd academic-tutoring-server
+## 🗂 Project Structure
+```
+academic-tutoring/
+├── academic-tutoring-client/        # React + Vite frontend
+│   ├── src/
+│   │   ├── components/              # UI + feature components
+│   │   ├── services/                # API abstraction (authAPI, roleAPI, adminAPI)
+│   │   ├── contexts/                # Providers (toast, theme, etc.)
+│   │   ├── styles/                  # Global & feature CSS
+│   │   └── assets/
+├── academic-tutoring-server/        # Node/Express backend
+│   ├── routes/                      # Route definitions
+│   ├── models/                      # Mongoose schemas
+│   ├── middleware/                  # Auth / validation
+│   └── services/                    # Business & AI integration
 ```
 
-2. Install dependencies:
-```bash
-npm install
+## 🛠 Tech Stack
+| Layer | Tech | Notes |
+|-------|------|-------|
+| Frontend | React 18, Vite | Fast dev, hooks-based architecture |
+| Styling | CSS variables | Theme + dark/light + accent swap (green) |
+| Icons | Lucide React | Consistent outlined icons |
+| State | Local component + contexts | Simple & direct; could adopt Redux/Zustand later |
+| Backend | Node.js + Express | REST API |
+| DB | MongoDB + Mongoose | Flexible lesson & user models |
+| Auth | JWT + bcrypt | Role gating and secure hashing |
+| AI | OpenAI API | GPT-powered tutoring (extensible) |
+
+## 📦 Prerequisites
+| Requirement | Version | Why |
+|-------------|---------|-----|
+| Node.js | 18+ (recommend 20+) | Vite + modern syntax |
+| MongoDB | 5+ | Lesson / user persistence |
+| OpenAI API Key | valid | AI tutoring features |
+
+Optional: Docker for future deployment, PM2 for process management.
+
+## ⚙️ Environment Variables (Server)
+Create `academic-tutoring-server/.env`:
 ```
-
-3. Configure environment variables:
-   - Open `.env` file
-   - Add your OpenAI API key:
-```
-OPENAI_API_KEY=your_actual_openai_api_key_here
-```
-   - Get your API key from: https://platform.openai.com/api-keys
-
-4. Start MongoDB (if running locally):
-   - Make sure MongoDB is installed and running
-   - Default connection: `mongodb://localhost:27017/academic-tutoring`
-
-5. Start the server:
-```bash
-npm start
-```
-The server will run on http://localhost:4000
-
-### Frontend Setup
-
-1. Navigate to the client directory:
-```bash
-cd academic-tutoring-client
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Start the development server:
-```bash
-npm run dev
-```
-The frontend will run on http://localhost:5173
-
-## Usage Guide
-
-### Getting Started
-
-1. **Registration**: Create an account by selecting your role (Teacher, Student, or Parent)
-2. **Login**: Sign in with your credentials
-3. **Profile Setup**: Complete your profile information
-
-### For Students
-- Browse available teachers and their subjects
-- Book lessons at convenient times  
-- Use the AI Tutor for homework help and study assistance
-- Message teachers for questions
-- Track lesson history and progress
-
-### For Teachers
-- Set up your teaching profile and subjects
-- Manage availability and time constraints
-- Accept/decline lesson bookings
-- Report working hours
-- Use AI Tutor to help create study materials
-
-### For Parents
-- Connect existing student accounts as children
-- Monitor children's lesson bookings
-- Access AI Tutor for educational support
-- Communicate with teachers
-
-### AI Tutor Features
-
-Access the AI Tutor through the "AI Tutor" button in the header:
-
-#### 🎯 Subject Selection
-Choose from:
-- Mathematics
-- Science  
-- English Language Arts
-- History
-- Computer Science
-- General Help
-
-#### ⚡ Quick Actions
-- **Explain Concept**: Get detailed explanations of topics
-- **Create Study Plan**: Generate personalized study schedules
-- **Generate Quiz**: Create practice quizzes on any subject
-- **Homework Help**: Get step-by-step problem solving assistance
-
-#### 💬 Interactive Chat
-- Natural conversation with the AI tutor
-- Context-aware responses based on your role and subject
-- Message history for reference
-- Real-time token usage tracking
-
-## API Endpoints
-
-### Authentication
-- `POST /auth/register` - User registration
-- `POST /auth/login` - User login
-
-### User Management
-- `GET /api/user/profile` - Get current user profile
-- `PUT /api/user/profile` - Update user profile
-
-### AI Tutoring
-- `POST /api/ai/chat` - Send message to AI tutor
-- `POST /api/ai/study-plan` - Generate study plan
-- `POST /api/ai/quiz` - Generate quiz
-- `GET /api/ai/usage` - Get AI usage statistics
-
-### Lessons & Booking
-- `GET /api/teachers` - Get available teachers
-- `POST /api/lessons/book` - Book a lesson
-- `GET /api/lessons/history` - Get lesson history
-
-## Configuration
-
-### Environment Variables
-
-#### Server (.env)
-```
-# OpenAI API Configuration
-OPENAI_API_KEY=your_openai_api_key_here
-
-# Server Configuration  
 PORT=4000
-
-# Database Configuration
 MONGODB_URI=mongodb://localhost:27017/academic-tutoring
-
-# JWT Configuration
 JWT_SECRET=your_jwt_secret_here
 JWT_EXPIRES_IN=7d
 
-# Node Environment
-NODE_ENV=development
+# OpenAI
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-3.5-turbo
+OPENAI_MAX_TOKENS=4000
+```
+You can add rate limiting or cost metrics later: `AI_MAX_DAILY_TOKENS`, `AI_LOGGING=1`.
+
+## ▶️ Run Locally
+Backend:
+```bash
+cd academic-tutoring-server
+npm install
+npm start
+# Server → http://localhost:4000
+```
+Frontend:
+```bash
+cd academic-tutoring-client
+npm install
+npm run dev
+# Frontend → http://localhost:5173
 ```
 
-### AI Configuration
+## � Authentication Flow
+1. Register (role chosen) → server creates user + hashed password
+2. Login → server returns JWT (stored client-side; consider httpOnly cookie for production security)
+3. Protected routes validated by middleware → role gating
+4. Token refresh strategy (manual re-login currently) – future: silent refresh endpoint
 
-The AI system is configured with:
-- **Model**: GPT-3.5-turbo
-- **Token Limits**: 4000 tokens per request
-- **Rate Limiting**: Tracked per user
-- **Educational Focus**: Responses optimized for learning
+## 👥 Role Highlights
+| Role | Capabilities |
+|------|--------------|
+| Student | View calendar, access AI tutor, message teachers |
+| Teacher | Manage availability, report hours, chat with students |
+| Parent | Book lessons, manage children, view history, use AI tutor |
+| Admin | (If active) manage users, logs, rates, salary reports |
 
-## Troubleshooting
+## 📅 Scheduling & Calendar
+- Current student view: full month grid with mini lesson badges
+- Meeting link indicators (camera icon) with improved visibility
+- Real-time hover tooltip: subject, status, duration, teacher
+- Planned enhancements: click-to-expand day, ICS export, conflict warnings
 
-### Common Issues
+## 🤖 AI Tutor Details
+Current:
+- Model: GPT-3.5 (configurable)
+- Context injection: subject + role + user request
+- Quick actions: explain, quiz, study plan, homework help
 
-1. **AI Chat not working**
-   - Verify OpenAI API key is set correctly in `.env`
-   - Check server console for API errors
-   - Ensure you have OpenAI API credits
+Roadmap (from plan):
+- Phase 2: progress analytics, lesson plan drafts
+- Phase 3: voice / OCR / handwriting recognition (optionally via 3rd-party APIs)
 
-2. **Frontend won't start**
-   - Make sure Node.js version is 18 or higher
-   - Delete `node_modules` and run `npm install` again
+## 🌍 Internationalization & RTL
+- Hebrew RTL support added in initial auth & role flows
+- Strategy: conditional `dir="rtl"` on root or container + logical CSS spacing
+- Future: extract strings → i18n JSON (e.g., i18next) for full multilingual support
 
-3. **Database connection issues**
-   - Verify MongoDB is running
-   - Check connection string in `.env`
+## 🧪 Testing (Suggested Next)
+Currently minimal/no automated tests. Recommended:
+- Unit: service layer (AI wrapper, booking validator)
+- Integration: booking flow (mock availability → book → history)
+- Snapshot/Visual: calendar & AI chat layout
 
-4. **Authentication errors**
-   - Clear browser localStorage
-   - Check JWT_SECRET is set in `.env`
+## 🩻 Troubleshooting Cheatsheet
+| Issue | Fix |
+|-------|-----|
+| AI chat 401 | Ensure OPENAI_API_KEY + server restart |
+| Calendar empty | Confirm lessons returned by API & correct date range |
+| JWT invalid | Clear localStorage or regenerate JWT_SECRET |
+| Build fails (Vite) | Upgrade Node (>=18), delete node_modules, reinstall |
+| CORS errors | Add proper origin in Express CORS middleware |
 
-### Error Messages
+## 🔐 Security Notes
+- Use httpOnly cookies for JWT in production
+- Add rate limiting on AI endpoints
+- Sanitize user-generated text sent to AI
+- Enforce max lessons per day / per student (abuse prevention)
 
-- **"OpenAI API key not configured"**: Add your API key to `.env` file
-- **"Database connection failed"**: Check MongoDB is running
-- **"Token expired"**: Login again to refresh authentication
+## 📈 Suggested Future Enhancements
+- Export salary / hours as CSV
+- Teacher performance dashboards
+- AI cost tracking dashboard
+- Calendar drag & drop rescheduling
+- WebSocket real-time updates (currently likely polling / standard requests)
+- PWA offline study plan viewer
 
-## Development
+## 🤝 Contributing
+1. Fork & branch (`feat/your-feature`)
+2. Add / adjust tests
+3. Keep commits scoped & conventional
+4. Open PR with summary & screenshots for UI work
 
-### Project Structure
-```
-academic-tutoring/
-├── academic-tutoring-client/     # React frontend
-│   ├── src/
-│   │   ├── components/          # React components
-│   │   ├── services/           # API services
-│   │   ├── styles/            # CSS styles
-│   │   └── contexts/          # React contexts
-├── academic-tutoring-server/    # Node.js backend
-│   ├── routes/                # API routes
-│   ├── models/               # Database models
-│   ├── middleware/          # Express middleware
-│   └── services/           # Business logic
-```
+## 📄 License
+MIT License – see repository for full text.
 
-### Key Components
-
-#### Frontend
-- `Dashboard.jsx` - Main user interface
-- `AIChat.jsx` - AI tutoring interface  
-- `Header.jsx` - Navigation and user actions
-- `Auth components` - Login/Register forms
-
-#### Backend
-- `Router.js` - Main server and API routes
-- `aiTutorService.js` - AI interaction logic
-- Authentication middleware
-- Database models and schemas
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License.
-
-## Support
-
-For questions or issues:
-1. Check this README for common solutions
-2. Review the troubleshooting section
-3. Check server console logs for detailed error messages
-4. Ensure all dependencies are properly installed
+## 🙋 Support
+1. Read this README first
+2. Check server logs
+3. Verify environment variables
+4. Isolate reproduction steps
+5. Open issue / discussion
 
 ---
-
-**Note**: This platform requires an OpenAI API key for AI tutoring features. Make sure to set up your API key before using the AI chat functionality.
+**Note**: An OpenAI API key is required for AI features. Without it, AI routes will return configuration errors. Keep keys private—do not commit `.env`.
