@@ -1,9 +1,35 @@
+/**
+ * Toast Context
+ * 
+ * React context for managing toast notifications throughout the application.
+ * Provides centralized notification management with different types and durations.
+ * 
+ * Features:
+ * - Multiple notification types (success, error, warning, info)
+ * - Configurable duration and auto-dismiss
+ * - Queue management for multiple toasts
+ * - Convenience methods for common notifications
+ * - Context provider and hook
+ * 
+ * @file ToastContext.jsx
+ * @version 1.0.0
+ * @author Academic Tutoring Team
+ */
+
 import { createContext, useContext, useState, useCallback } from 'react';
 import Toast from '../components/Toast';
 import '../components/Toast.css';
 
+// Create toast context
 const ToastContext = createContext();
 
+/**
+ * Custom hook to access toast context
+ * Throws error if used outside of ToastProvider
+ * 
+ * @returns {Object} Toast context value with notification methods
+ * @throws {Error} If used outside ToastProvider
+ */
 export const useToast = () => {
   const context = useContext(ToastContext);
   if (!context) {
@@ -12,9 +38,29 @@ export const useToast = () => {
   return context;
 };
 
+/**
+ * Toast Provider Component
+ * 
+ * Provides toast notification context to child components with queue management.
+ * 
+ * @param {Object} props - Component props
+ * @param {React.ReactNode} props.children - Child components
+ * @returns {JSX.Element} Toast provider wrapper with notification container
+ */
 export const ToastProvider = ({ children }) => {
+  // State for managing toast queue
   const [toasts, setToasts] = useState([]);
 
+  /**
+   * Add a new toast notification to the queue
+   * 
+   * @param {Object} toast - Toast configuration
+   * @param {string} [toast.type='info'] - Toast type (success, error, warning, info)
+   * @param {string} toast.title - Toast title
+   * @param {string} toast.message - Toast message
+   * @param {number} [toast.duration=5000] - Auto-dismiss duration in milliseconds
+   * @returns {number} Toast ID for manual removal
+   */
   const addToast = useCallback((toast) => {
     const id = Date.now() + Math.random();
     const newToast = {
@@ -28,10 +74,18 @@ export const ToastProvider = ({ children }) => {
     return id;
   }, []);
 
+  /**
+   * Remove a specific toast by ID
+   * 
+   * @param {number} id - Toast ID to remove
+   */
   const removeToast = useCallback((id) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   }, []);
 
+  /**
+   * Clear all toast notifications
+   */
   const clearAllToasts = useCallback(() => {
     setToasts([]);
   }, []);

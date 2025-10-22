@@ -1,3 +1,20 @@
+/**
+ * Main App Component
+ * 
+ * Root application component that sets up routing, context providers, and global configuration.
+ * Handles authentication routing and role-based access control.
+ * 
+ * Features:
+ * - React Router setup with protected routes
+ * - Context providers for theme and notifications
+ * - Role-based route protection
+ * - Public and private route separation
+ * - Global CSS imports
+ * 
+ * @component
+ * @returns {JSX.Element} Main application component
+ */
+
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
 import Register from './components/Register';

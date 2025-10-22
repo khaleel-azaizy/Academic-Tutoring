@@ -1,3 +1,28 @@
+/**
+ * Toast Notification Component
+ * 
+ * Displays temporary notification messages with different types and animations.
+ * Provides user feedback for various actions and system states.
+ * 
+ * Features:
+ * - Multiple notification types (success, error, warning, info)
+ * - Auto-dismiss with configurable duration
+ * - Smooth entrance and exit animations
+ * - Manual close functionality
+ * - Icon indicators for each type
+ * - Accessible design
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {string} props.id - Unique identifier for the toast
+ * @param {string} [props.type='info'] - Toast type (success, error, warning, info)
+ * @param {string} props.title - Toast title text
+ * @param {string} props.message - Toast message content
+ * @param {number} [props.duration=5000] - Auto-dismiss duration in milliseconds
+ * @param {Function} props.onClose - Function to call when toast is closed
+ * @returns {JSX.Element} Toast notification component
+ */
+
 import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 import './Toast.css';
@@ -10,8 +35,9 @@ const Toast = ({
   duration = 5000, 
   onClose 
 }) => {
-  const [isVisible, setIsVisible] = useState(false);
-  const [isLeaving, setIsLeaving] = useState(false);
+  // Animation state management
+  const [isVisible, setIsVisible] = useState(false); // Controls entrance animation
+  const [isLeaving, setIsLeaving] = useState(false); // Controls exit animation
 
   useEffect(() => {
     // Trigger entrance animation

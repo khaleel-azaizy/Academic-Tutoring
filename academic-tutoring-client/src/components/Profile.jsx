@@ -1,3 +1,26 @@
+/**
+ * Profile Component
+ * 
+ * User profile management interface with editing capabilities and role-specific features.
+ * Handles profile updates, specializations (for teachers), and account management.
+ * 
+ * Features:
+ * - Profile information editing
+ * - Role-specific fields (grade for students, specializations for teachers)
+ * - Teacher meeting link management
+ * - Specialization selection for teachers
+ * - Account deletion with confirmation
+ * - Form validation and error handling
+ * - Loading states for async operations
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {Object} props.user - Current user data
+ * @param {Function} props.onUpdateUser - User update handler
+ * @param {Function} props.onDeleteAccount - Account deletion handler
+ * @returns {JSX.Element} Profile management interface
+ */
+
 import React, { useState, useEffect } from 'react';
 import { 
   UserCheck, 
@@ -16,7 +39,8 @@ import {
 import { roleAPI } from '../services/api';
 
 const Profile = ({ user, onUpdateUser, onDeleteAccount }) => {
-  const [isEditing, setIsEditing] = useState(false);
+  // Profile editing state
+  const [isEditing, setIsEditing] = useState(false); // Whether profile is in edit mode
   const [editForm, setEditForm] = useState({
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
@@ -25,13 +49,13 @@ const Profile = ({ user, onUpdateUser, onDeleteAccount }) => {
     grade: user?.grade || '',
     teacherMeetingLink: user?.teacherMeetingLink || ''
   });
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Show delete confirmation dialog
   
   // Teacher specialization state
-  const [availableSubjects, setAvailableSubjects] = useState([]);
-  const [selectedSpecializations, setSelectedSpecializations] = useState(user?.specializations || []);
-  const [isEditingSpecializations, setIsEditingSpecializations] = useState(false);
-  const [specializationsLoading, setSpecializationsLoading] = useState(false);
+  const [availableSubjects, setAvailableSubjects] = useState([]); // Available subjects for selection
+  const [selectedSpecializations, setSelectedSpecializations] = useState(user?.specializations || []); // Selected specializations
+  const [isEditingSpecializations, setIsEditingSpecializations] = useState(false); // Specialization edit mode
+  const [specializationsLoading, setSpecializationsLoading] = useState(false); // Loading state for specializations
 
   // Load available subjects for teachers
   useEffect(() => {

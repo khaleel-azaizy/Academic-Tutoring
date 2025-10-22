@@ -1,3 +1,23 @@
+/**
+ * Academic Tutoring System - Main Express Router
+ * 
+ * This file contains all API endpoints for the academic tutoring platform.
+ * Handles authentication, user management, lesson booking, messaging, and admin functions.
+ * 
+ * Features:
+ * - User authentication and authorization
+ * - Role-based access control (Student, Parent, Teacher, Admin)
+ * - Lesson booking and management
+ * - Real-time messaging system
+ * - AI tutoring integration
+ * - Admin dashboard and user management
+ * - Payment and salary tracking
+ * 
+ * @file Router.js
+ * @version 1.0.0
+ * @author Academic Tutoring Team
+ */
+
 const express = require('express')
 const { getDb, connectToDb } = require('./db')
 const cors = require('cors');
@@ -9,13 +29,21 @@ const { ObjectId } = require('mongodb');
 const e = require('express');
 const aiTutorService = require('./services/aiTutorService');
 
+// Initialize Express application
 const app = express()
-app.use(express.json())
-app.use(cookieParser());  
-app.use(cors({origin: 'http://localhost:5173',credentials: true}));
 
+// Middleware configuration
+app.use(express.json()) // Parse JSON request bodies
+app.use(cookieParser()); // Parse cookies for authentication
+app.use(cors({origin: 'http://localhost:5173',credentials: true})); // CORS configuration for frontend
+
+// Database connection variable
 let db
 
+/**
+ * Database connection and server startup
+ * Connects to MongoDB and starts the Express server on port 4000
+ */
 connectToDb((err) => {
   if(!err){
     app.listen('4000', () => {
@@ -25,9 +53,27 @@ connectToDb((err) => {
   }
 })
 
+// JWT secret for token signing and verification
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
-// User Registration Route
+/**
+ * User Registration Endpoint
+ * 
+ * Creates a new user account with role-based validation and secure password hashing.
+ * Supports all user roles: Parent, Student, Teacher, Admin
+ * 
+ * @route POST /api/register
+ * @access Public
+ * @param {Object} req.body - Registration data
+ * @param {string} req.body.firstName - User's first name
+ * @param {string} req.body.lastName - User's last name
+ * @param {string} req.body.email - User's email address
+ * @param {string} req.body.password - User's password
+ * @param {string} req.body.role - User role (Parent, Student, Teacher, Admin)
+ * @param {string} [req.body.phoneNumber] - Optional phone number
+ * @param {string} [req.body.grade] - Optional grade for students
+ * @returns {Object} Success response with user data and JWT token
+ */
 app.post('/api/register', async (req, res) => {
   try {
     const { firstName, lastName, email, password, role, phoneNumber, grade } = req.body;
@@ -37,24 +83,23 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ error: 'כל השדות הנדרשים חייבים להיות מלאים' });
     }
 
-    // Validate role
+    // Validate role against allowed values
     const validRoles = ['Parent', 'Student', 'Teacher', 'Admin'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ error: 'Invalid user type' });
     }
 
-
-    // Check if user already exists
+    // Check if user already exists to prevent duplicates
     const existingUser = await db.collection('users').findOne({ email });
     if (existingUser) {
       return res.status(400).json({ error: 'User with this email already exists' });
     }
 
-    // Hash password
+    // Hash password with bcrypt for security
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Create user object
+    // Create user object with role-specific fields
     const newUser = {
       firstName,
       lastName,
@@ -72,7 +117,7 @@ app.post('/api/register', async (req, res) => {
     // Insert user into database
     const result = await db.collection('users').insertOne(newUser);
     
-    // Generate JWT token
+    // Generate JWT token for authentication
     const token = jwt.sign(
       { 
         userId: result.insertedId,
@@ -83,7 +128,7 @@ app.post('/api/register', async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    // Set cookie
+    // Set secure HTTP-only cookie
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -91,7 +136,7 @@ app.post('/api/register', async (req, res) => {
       sameSite: 'lax'
     });
 
-    // Return success response (excluding password)
+    // Return success response (excluding password for security)
     const { password: _, ...userResponse } = newUser;
     userResponse._id = result.insertedId;
 
@@ -679,8 +724,9 @@ app.post('/api/bookings', authenticateToken, authorizeRole('Parent'), async (req
       return res.status(404).json({ error: 'Teacher not found' });
     }
     let studentId = null;
+    let student = null;
     if (studentEmail) {
-      const student = await db.collection('users').findOne({ email: studentEmail.toLowerCase(), role: 'Student' });
+      student = await db.collection('users').findOne({ email: studentEmail.toLowerCase(), role: 'Student' });
       if (student) {
         studentId = student._id;
       }
@@ -719,6 +765,8 @@ app.post('/api/bookings', authenticateToken, authorizeRole('Parent'), async (req
       studentId: studentId ? new ObjectId(studentId) : null,
       teacherEmail: teacher.email,
       teacherName: `${teacher.firstName || ''} ${teacher.lastName || ''}`.trim(),
+      studentEmail: studentEmail || null,
+      studentName: studentId ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : null,
       teacherMeetingLink: teacher.teacherMeetingLink || null,
       dateTime: new Date(dateTime),
       subject: subject || '',
@@ -2301,28 +2349,56 @@ app.get('/api/admin/lessons', authenticateToken, authorizeRole('Admin'), async (
       query.studentEmail = studentId; // Assuming studentId is email for this search
     }
 
-    const lessons = await db.collection('lessons').aggregate([
-      { $match: query },
-      { $lookup: {
-          from: 'users',
-          localField: 'teacherId',
-          foreignField: '_id',
-          as: 'teacher',
-          pipeline: [{ $project: { firstName: 1, lastName: 1, email: 1 } }]
-      }},
-      { $lookup: {
-          from: 'users',
-          localField: 'parentId',
-          foreignField: '_id',
-          as: 'parent',
-          pipeline: [{ $project: { firstName: 1, lastName: 1, email: 1 } }]
-      }},
-      { $unwind: { path: '$teacher', preserveNullAndEmptyArrays: true } },
-      { $unwind: { path: '$parent', preserveNullAndEmptyArrays: true } },
-      { $sort: { dateTime: -1 } }
-    ]).toArray();
+    // First get all lessons
+    const lessons = await db.collection('lessons').find(query).sort({ dateTime: -1 }).toArray();
+    
+    // Then enrich with user data
+    const enrichedLessons = await Promise.all(lessons.map(async (lesson) => {
+      const enrichedLesson = { ...lesson };
+      
+      // Get teacher data
+      if (lesson.teacherId) {
+        const teacher = await db.collection('users').findOne(
+          { _id: lesson.teacherId },
+          { projection: { firstName: 1, lastName: 1, email: 1 } }
+        );
+        enrichedLesson.teacher = teacher;
+      }
+      
+      // Get parent data
+      if (lesson.parentId) {
+        const parent = await db.collection('users').findOne(
+          { _id: lesson.parentId },
+          { projection: { firstName: 1, lastName: 1, email: 1 } }
+        );
+        enrichedLesson.parent = parent;
+      }
+      
+      // Get student data - this is the key part!
+      if (lesson.studentId) {
+        const student = await db.collection('users').findOne(
+          { _id: lesson.studentId },
+          { projection: { firstName: 1, lastName: 1, email: 1 } }
+        );
+        enrichedLesson.student = student;
+        
+        // Set student email and name from the lookup
+        if (student) {
+          enrichedLesson.studentEmail = student.email;
+          enrichedLesson.studentName = `${student.firstName} ${student.lastName}`.trim();
+        }
+      }
+      
+      return enrichedLesson;
+    }));
 
-    res.json({ lessons, message: 'Lessons retrieved successfully' });
+    // Debug logging
+    console.log('Admin lessons query result:', enrichedLessons.length, 'lessons found');
+    if (enrichedLessons.length > 0) {
+      console.log('Sample lesson structure:', JSON.stringify(enrichedLessons[0], null, 2));
+    }
+
+    res.json({ lessons: enrichedLessons, message: 'Lessons retrieved successfully' });
   } catch (error) {
     console.error('Admin get lessons error:', error);
     res.status(500).json({ error: 'Failed to get lessons' });

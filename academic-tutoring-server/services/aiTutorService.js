@@ -1,11 +1,46 @@
+/**
+ * AI Tutor Service
+ * 
+ * Provides AI-powered tutoring functionality using OpenAI's GPT models.
+ * Handles chat responses, study plan generation, quiz creation, and concept explanations.
+ * 
+ * Features:
+ * - Subject-specific tutoring prompts
+ * - Grade-appropriate responses
+ * - Study plan generation
+ * - Quiz creation
+ * - Concept explanations
+ * - Lazy initialization to prevent startup crashes
+ * 
+ * @file aiTutorService.js
+ * @version 1.0.0
+ * @author Academic Tutoring Team
+ */
+
 const OpenAI = require('openai');
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // Add this to your .env file
-});
+// OpenAI client instance (lazy initialization to prevent startup crashes)
+let openai = null;
 
-// Educational subjects and their specific prompts
+/**
+ * Get OpenAI client instance
+ * Initializes the client only when needed and if API key is available
+ * 
+ * @returns {OpenAI|null} OpenAI client instance or null if not configured
+ */
+function getOpenAIClient() {
+  if (!openai && process.env.OPENAI_API_KEY) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openai;
+}
+
+/**
+ * Subject-specific tutoring prompts and configurations
+ * Each subject has tailored system prompts and token limits for optimal responses
+ */
 const SUBJECT_PROMPTS = {
   math: {
     system: "You are a helpful math tutor. Explain mathematical concepts clearly with step-by-step solutions. Use examples and encourage the student to think through problems.",
@@ -50,6 +85,16 @@ class AITutorService {
   // Main chat function for student questions
   async getChatResponse(message, subject = 'general', userGrade = null, conversationHistory = []) {
     try {
+      // Check if OpenAI is configured
+      const client = getOpenAIClient();
+      if (!client) {
+        return {
+          success: false,
+          error: 'AI service is not configured. Please contact administrator.',
+          type: 'not_configured'
+        };
+      }
+
       // Validate inputs
       if (!message || message.trim().length === 0) {
         throw new Error('Message cannot be empty');
@@ -81,7 +126,7 @@ class AITutorService {
       ];
 
       // Call OpenAI API
-      const completion = await openai.chat.completions.create({
+      const completion = await client.chat.completions.create({
         model: 'gpt-3.5-turbo', // You can change to 'gpt-4' for better quality
         messages: messages,
         max_tokens: subjectConfig.maxTokens,
@@ -130,6 +175,14 @@ class AITutorService {
   // Generate study plan for a student
   async generateStudyPlan(grade, subjects, weakAreas = [], timeAvailable = '1 hour') {
     try {
+      const client = getOpenAIClient();
+      if (!client) {
+        return {
+          success: false,
+          error: 'AI service is not configured. Please contact administrator.'
+        };
+      }
+
       const prompt = `Create a personalized study plan for a ${grade} student.
       
       Subjects to focus on: ${subjects.join(', ')}
@@ -144,7 +197,7 @@ class AITutorService {
       
       Make it practical and achievable for a student of this grade level.`;
 
-      const completion = await openai.chat.completions.create({
+      const completion = await client.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [
           { role: 'system', content: 'You are an educational consultant creating personalized study plans for students.' },
@@ -172,6 +225,14 @@ class AITutorService {
   // Generate practice questions for a topic
   async generateQuiz(subject, topic, grade, questionCount = 5) {
     try {
+      const client = getOpenAIClient();
+      if (!client) {
+        return {
+          success: false,
+          error: 'AI service is not configured. Please contact administrator.'
+        };
+      }
+
       const gradeLevel = GRADE_LEVELS[grade] || 'general';
       
       const prompt = `Generate ${questionCount} practice questions for ${subject} on the topic of "${topic}" appropriate for ${grade} students.
@@ -185,7 +246,7 @@ class AITutorService {
       Make sure questions are at appropriate difficulty level for ${gradeLevel} school students.
       Format as a clear, numbered list.`;
 
-      const completion = await openai.chat.completions.create({
+      const completion = await client.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [
           { role: 'system', content: 'You are an experienced teacher creating educational quiz questions.' },
@@ -216,6 +277,14 @@ class AITutorService {
   // Explain a concept in simple terms
   async explainConcept(concept, subject, grade) {
     try {
+      const client = getOpenAIClient();
+      if (!client) {
+        return {
+          success: false,
+          error: 'AI service is not configured. Please contact administrator.'
+        };
+      }
+
       const gradeLevel = GRADE_LEVELS[grade] || 'general';
       
       const prompt = `Explain the concept of "${concept}" in ${subject} to a ${grade} student.
@@ -229,7 +298,7 @@ class AITutorService {
       
       Make it engaging and easy to understand for a ${gradeLevel} school student.`;
 
-      const completion = await openai.chat.completions.create({
+      const completion = await client.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [
           { role: 'system', content: 'You are a patient and skilled tutor who excels at explaining complex concepts in simple terms.' },

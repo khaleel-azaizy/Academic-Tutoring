@@ -1,3 +1,32 @@
+/**
+ * Header Component
+ * 
+ * Main navigation header with user controls, notifications, and theme toggle.
+ * Provides role-based navigation and user interface controls.
+ * 
+ * Features:
+ * - User profile and logout functionality
+ * - Notification system with unread count
+ * - Theme toggle (dark/light mode)
+ * - Role-based navigation elements
+ * - Responsive sidebar toggle
+ * - AI chat access
+ * - Messages access
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {Object} props.user - Current user data
+ * @param {Function} props.onLogout - Logout handler function
+ * @param {Function} props.onProfile - Profile view handler
+ * @param {Function} props.onBackToDashboard - Back to dashboard handler
+ * @param {Array} [props.notifications=[]] - User notifications array
+ * @param {Function} props.onMarkAllRead - Mark all notifications as read
+ * @param {Function} props.onMessages - Messages view handler
+ * @param {Function} props.onAIChat - AI chat handler
+ * @param {string} [props.currentView='dashboard'] - Current view identifier
+ * @returns {JSX.Element} Header navigation component
+ */
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Settings, 
@@ -17,10 +46,11 @@ import {
 import { useTheme } from '../contexts/ThemeContext';
 
 const Header = ({ user, onLogout, onProfile, onBackToDashboard, notifications = [], onMarkAllRead, onMessages, onAIChat, currentView = 'dashboard' }) => {
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const { isDarkMode, toggleTheme } = useTheme();
-  const [openDropdown, setOpenDropdown] = useState(null); // 'notifications'
+  // State management
+  const [unreadCount, setUnreadCount] = useState(0); // Count of unread notifications
+  const [isExpanded, setIsExpanded] = useState(false); // Sidebar expansion state
+  const { isDarkMode, toggleTheme } = useTheme(); // Theme context
+  const [openDropdown, setOpenDropdown] = useState(null); // Currently open dropdown ('notifications')
 
   useEffect(() => {
     const unread = notifications.filter(n => !n.read).length;

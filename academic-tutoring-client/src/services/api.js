@@ -1,8 +1,30 @@
+/**
+ * API Service Layer
+ * 
+ * Centralized API communication layer for the frontend application.
+ * Handles all HTTP requests to the backend with proper error handling and authentication.
+ * 
+ * Features:
+ * - Axios-based HTTP client with interceptors
+ * - Automatic error handling and authentication
+ * - Organized API endpoints by functionality
+ * - Cookie-based authentication support
+ * - Centralized error handling
+ * 
+ * @file api.js
+ * @version 1.0.0
+ * @author Academic Tutoring Team
+ */
+
 import axios from 'axios';
 
+// Backend API base URL
 const API_BASE_URL = 'http://localhost:4000/api';
 
-// Create axios instance with default config
+/**
+ * Create axios instance with default configuration
+ * Includes credentials for cookie-based authentication
+ */
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true, // Important for cookies
@@ -11,12 +33,15 @@ const api = axios.create({
   }
 });
 
-// Add response interceptor to handle errors
+/**
+ * Response interceptor for global error handling
+ * Automatically handles 401 unauthorized responses by redirecting to login
+ */
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized access
+      // Handle unauthorized access - clear user data and redirect to login
       localStorage.removeItem('user');
       window.location.href = '/login';
     }

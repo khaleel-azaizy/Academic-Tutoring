@@ -1,3 +1,21 @@
+/**
+ * Login Component
+ * 
+ * Handles user authentication and login functionality.
+ * Provides a secure login form with validation and error handling.
+ * 
+ * Features:
+ * - Email and password authentication
+ * - Form validation with error messages
+ * - Password visibility toggle
+ * - Loading states during authentication
+ * - Automatic redirect after successful login
+ * - Toast notifications for user feedback
+ * 
+ * @component
+ * @returns {JSX.Element} Login form interface
+ */
+
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
@@ -6,14 +24,17 @@ import { useToast } from '../contexts/ToastContext';
 import '../styles/Auth.css';
 
 const Login = () => {
+  // Navigation and toast utilities
   const navigate = useNavigate();
   const { showError, showSuccess } = useToast();
+  
+  // Form state management
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false); // Loading state during authentication
+  const [showPassword, setShowPassword] = useState(false); // Password visibility toggle
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;

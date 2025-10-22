@@ -1,22 +1,48 @@
+/**
+ * Messages Sidebar Component
+ * 
+ * Real-time messaging interface for communication between users.
+ * Supports teacher-student conversations with message history and search functionality.
+ * 
+ * Features:
+ * - Conversation list and management
+ * - Real-time messaging
+ * - Teacher search for new conversations
+ * - Message history and timestamps
+ * - Role-based conversation access
+ * - New conversation creation
+ * - Message sending and receiving
+ * - Loading states and error handling
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {boolean} props.isOpen - Whether sidebar is visible
+ * @param {Function} props.onClose - Close sidebar handler
+ * @param {Object} props.user - Current user data
+ * @param {Object} props.roleAPI - API service for role-specific operations
+ * @returns {JSX.Element} Messages sidebar interface
+ */
+
 import React, { useState, useEffect } from 'react';
 import { GraduationCap, UserCheck, X, ArrowLeft, Plus, Search } from 'lucide-react';
 
 const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
-  const [conversations, setConversations] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [messageForm, setMessageForm] = useState({ message: '' });
-  const [loading, setLoading] = useState(false);
+  // Conversation state management
+  const [conversations, setConversations] = useState([]); // List of user conversations
+  const [selectedConversation, setSelectedConversation] = useState(null); // Currently selected conversation
+  const [messages, setMessages] = useState([]); // Messages in selected conversation
+  const [messageForm, setMessageForm] = useState({ message: '' }); // Message input form
+  const [loading, setLoading] = useState(false); // Loading state for operations
   
   // New conversation state
-  const [showNewConversation, setShowNewConversation] = useState(false);
-  const [teacherSearchQuery, setTeacherSearchQuery] = useState('');
-  const [teacherSearchResults, setTeacherSearchResults] = useState([]);
-  const [searchingTeachers, setSearchingTeachers] = useState(false);
+  const [showNewConversation, setShowNewConversation] = useState(false); // Show new conversation form
+  const [teacherSearchQuery, setTeacherSearchQuery] = useState(''); // Teacher search query
+  const [teacherSearchResults, setTeacherSearchResults] = useState([]); // Teacher search results
+  const [searchingTeachers, setSearchingTeachers] = useState(false); // Teacher search loading state
   const [newConversationForm, setNewConversationForm] = useState({ 
     teacherEmail: '', 
     message: '' 
-  });
+  }); // New conversation form data
 
   useEffect(() => {
     if (isOpen && user) {

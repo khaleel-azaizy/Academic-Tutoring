@@ -1,3 +1,22 @@
+/**
+ * Dashboard Component
+ * 
+ * Main dashboard component that renders different interfaces based on user role.
+ * Handles authentication, role-based content rendering, and all major application features.
+ * 
+ * Features:
+ * - Role-based dashboard (Student, Parent, Teacher, Admin)
+ * - Lesson management and booking
+ * - User profile management
+ * - Admin panel with statistics and user management
+ * - AI tutoring integration
+ * - Real-time messaging
+ * - Data visualization charts
+ * 
+ * @component
+ * @returns {JSX.Element} The main dashboard interface
+ */
+
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI, roleAPI, adminAPI } from '../services/api';
@@ -8,6 +27,12 @@ import Header from './Header';
 import Profile from './Profile';
 import MessagesSidebar from './MessagesSidebar';
 import AIChat from './AIChat';
+import { 
+  UserDistributionChart, 
+  SalaryDistributionChart, 
+  UserGrowthChart,
+  ActiveVsBannedChart 
+} from './AdminCharts';
 import { 
   Users, 
   Edit3, 
@@ -35,110 +60,116 @@ import {
 import { Video } from 'lucide-react';
 
 const Dashboard = () => {
+  // Navigation and toast utilities
   const navigate = useNavigate();
   const { showSuccess, showError, showWarning, showInfo } = useToast();
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [openModal, setOpenModal] = useState(null); // 'hours' | 'constraint' | 'book' | 'contact' | 'chat' | 'teacher-chat' | 'ai-chat'
-  const [activeTab, setActiveTab] = useState(''); // For controlling tabs
-
-  // Teacher action state
-  const [hoursForm, setHoursForm] = useState({ date: '', hours: '', notes: '' });
-  const [constraintForm, setConstraintForm] = useState({ dayOfWeek: 0, startTime: '', endTime: '', note: '' });
-  const [constraints, setConstraints] = useState([]);
-  const [editingConstraint, setEditingConstraint] = useState(null);
-  const [timeRange, setTimeRange] = useState({ from: '', to: '' });
-  const [hoursSummary, setHoursSummary] = useState(null);
-  const [hoursEntries, setHoursEntries] = useState([]);
-  const [teacherLessons, setTeacherLessons] = useState([]);
-  const [completeLessonState, setCompleteLessonState] = useState({ lessonId: '', workedMinutes: '' });
-  const [notifications, setNotifications] = useState([]);
-  const [messages, setMessages] = useState([]);
-  const [selectedMessageIds, setSelectedMessageIds] = useState([]);
-  const [teacherConversations, setTeacherConversations] = useState([]);
-  const [selectedStudentForChat, setSelectedStudentForChat] = useState(null);
-  const [teacherChatConversation, setTeacherChatConversation] = useState({ student: null, messages: [] });
-  const [teacherChatForm, setTeacherChatForm] = useState({ message: '' });
-  const [showProfile, setShowProfile] = useState(false);
-  const [showMessages, setShowMessages] = useState(false);
-
-  // Parent action state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSubject, setSelectedSubject] = useState('');
-  const [bookingForm, setBookingForm] = useState({ teacherEmail: '', dateTime: '', subject: '', durationMinutes: 60, studentEmail: '' });
-  const [teacherList, setTeacherList] = useState([]);
-  const [selectedTeacher, setSelectedTeacher] = useState('');
-  const [availabilityDate, setAvailabilityDate] = useState('');
-  const [availableSlots, setAvailableSlots] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
-  const [searchTimeout, setSearchTimeout] = useState(null);
-  const [parentHistory, setParentHistory] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
   
-  // Booking flow state
-  const [bookingStep, setBookingStep] = useState(1); // 1: Subject, 2: Teacher, 3: Date/Time, 4: Confirm
+  // Core application state
+  const [user, setUser] = useState(null); // Current authenticated user data
+  const [loading, setLoading] = useState(true); // Loading state for initial data fetch
+  const [openModal, setOpenModal] = useState(null); // Currently open modal: 'hours' | 'constraint' | 'book' | 'contact' | 'chat' | 'teacher-chat' | 'ai-chat'
+  const [activeTab, setActiveTab] = useState(''); // Currently active tab for navigation
+
+  // ==================== TEACHER STATE ====================
+  const [hoursForm, setHoursForm] = useState({ date: '', hours: '', notes: '' }); // Form for logging work hours
+  const [constraintForm, setConstraintForm] = useState({ dayOfWeek: 0, startTime: '', endTime: '', note: '' }); // Form for setting availability constraints
+  const [constraints, setConstraints] = useState([]); // List of teacher's availability constraints
+  const [editingConstraint, setEditingConstraint] = useState(null); // Currently editing constraint ID
+  const [timeRange, setTimeRange] = useState({ from: '', to: '' }); // Date range for hours summary
+  const [hoursSummary, setHoursSummary] = useState(null); // Calculated hours summary data
+  const [hoursEntries, setHoursEntries] = useState([]); // Individual hours entries
+  const [teacherLessons, setTeacherLessons] = useState([]); // Teacher's scheduled lessons
+  const [completeLessonState, setCompleteLessonState] = useState({ lessonId: '', workedMinutes: '' }); // Form for completing lessons
+  const [notifications, setNotifications] = useState([]); // Teacher notifications
+  const [messages, setMessages] = useState([]); // Teacher messages
+  const [selectedMessageIds, setSelectedMessageIds] = useState([]); // Selected messages for bulk actions
+  const [teacherConversations, setTeacherConversations] = useState([]); // List of teacher conversations
+  const [selectedStudentForChat, setSelectedStudentForChat] = useState(null); // Currently selected student for chat
+  const [teacherChatConversation, setTeacherChatConversation] = useState({ student: null, messages: [] }); // Active chat conversation
+  const [teacherChatForm, setTeacherChatForm] = useState({ message: '' }); // Chat message input form
+  const [showProfile, setShowProfile] = useState(false); // Show/hide profile modal
+  const [showMessages, setShowMessages] = useState(false); // Show/hide messages sidebar
+
+  // ==================== PARENT STATE ====================
+  const [searchQuery, setSearchQuery] = useState(''); // Teacher search query
+  const [selectedSubject, setSelectedSubject] = useState(''); // Selected subject for booking
+  const [bookingForm, setBookingForm] = useState({ teacherEmail: '', dateTime: '', subject: '', durationMinutes: 60, studentEmail: '' }); // Lesson booking form
+  const [teacherList, setTeacherList] = useState([]); // Available teachers list
+  const [selectedTeacher, setSelectedTeacher] = useState(''); // Currently selected teacher
+  const [availabilityDate, setAvailabilityDate] = useState(''); // Selected date for availability check
+  const [availableSlots, setAvailableSlots] = useState([]); // Available time slots for selected date
+  const [isSearching, setIsSearching] = useState(false); // Teacher search loading state
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false); // Availability check loading state
+  const [searchTimeout, setSearchTimeout] = useState(null); // Search debounce timeout
+  const [parentHistory, setParentHistory] = useState([]); // Parent's lesson history
+  const [historyLoading, setHistoryLoading] = useState(false); // History loading state
+  
+  // Booking flow state - Multi-step booking process
+  const [bookingStep, setBookingStep] = useState(1); // Current booking step: 1: Subject, 2: Teacher, 3: Date/Time, 4: Confirm
   
   // Children management state
-  const [children, setChildren] = useState([]);
-  const [selectedChild, setSelectedChild] = useState('');
-  const [childrenLoading, setChildrenLoading] = useState(false);
-  const [newChildForm, setNewChildForm] = useState({ email: '', grade: '' });
-  const [showAddChild, setShowAddChild] = useState(false);
-  const [editingChild, setEditingChild] = useState(null);
-  const [editChildForm, setEditChildForm] = useState({ grade: '' });
+  const [children, setChildren] = useState([]); // Parent's children list
+  const [selectedChild, setSelectedChild] = useState(''); // Currently selected child
+  const [childrenLoading, setChildrenLoading] = useState(false); // Children data loading state
+  const [newChildForm, setNewChildForm] = useState({ email: '', grade: '' }); // Form for adding new child
+  const [showAddChild, setShowAddChild] = useState(false); // Show/hide add child form
+  const [editingChild, setEditingChild] = useState(null); // Currently editing child ID
+  const [editChildForm, setEditChildForm] = useState({ grade: '' }); // Form for editing child
   
   // Parent lesson cancellation state
-  const [cancellingLesson, setCancellingLesson] = useState(null);
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-  const [lessonToCancel, setLessonToCancel] = useState(null);
+  const [cancellingLesson, setCancellingLesson] = useState(null); // Lesson being cancelled
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false); // Show cancellation confirmation
+  const [lessonToCancel, setLessonToCancel] = useState(null); // Lesson to be cancelled
   
-  // Tooltip state
-  const [hoveredLesson, setHoveredLesson] = useState(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  // Tooltip state for lesson hover effects
+  const [hoveredLesson, setHoveredLesson] = useState(null); // Currently hovered lesson
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 }); // Tooltip position coordinates
   
-  // Month navigation state (0 = current month, -1 = previous, +1 = next, etc.)
-  const [monthOffset, setMonthOffset] = useState(0);
-  
+  // Month navigation state for calendar views
+  const [monthOffset, setMonthOffset] = useState(0); // 0 = current month, -1 = previous, +1 = next, etc.
 
-  // Student action state
-  const [upcoming, setUpcoming] = useState([]);
-  const [contactForm, setContactForm] = useState({ teacherEmail: '', message: '' });
-  const [studentConversation, setStudentConversation] = useState({ teacher: null, messages: [] });
-  const [studentConversationsList, setStudentConversationsList] = useState([]);
-  const [teacherSearchQuery, setTeacherSearchQuery] = useState('');
-  const [teacherSearchResults, setTeacherSearchResults] = useState([]);
-  const [selectedTeacherForChat, setSelectedTeacherForChat] = useState(null);
+  // ==================== STUDENT STATE ====================
+  const [upcoming, setUpcoming] = useState([]); // Student's upcoming lessons
+  const [contactForm, setContactForm] = useState({ teacherEmail: '', message: '' }); // Form for contacting teacher
+  const [studentConversation, setStudentConversation] = useState({ teacher: null, messages: [] }); // Active student conversation
+  const [studentConversationsList, setStudentConversationsList] = useState([]); // List of student conversations
+  const [teacherSearchQuery, setTeacherSearchQuery] = useState(''); // Teacher search query for students
+  const [teacherSearchResults, setTeacherSearchResults] = useState([]); // Teacher search results
+  const [selectedTeacherForChat, setSelectedTeacherForChat] = useState(null); // Selected teacher for chat
 
-  // Admin action state
-  const [adminStats, setAdminStats] = useState({});
-  const [adminUsers, setAdminUsers] = useState([]);
-  const [adminLessons, setAdminLessons] = useState([]);
-  const [adminPayments, setAdminPayments] = useState([]);
-  const [adminLogs, setAdminLogs] = useState([]);
-  const [adminLoading, setAdminLoading] = useState(false);
+  // ==================== ADMIN STATE ====================
+  const [adminStats, setAdminStats] = useState({}); // Admin dashboard statistics
+  const [adminUsers, setAdminUsers] = useState([]); // All users for admin management
+  const [adminLessons, setAdminLessons] = useState([]); // All lessons for admin management
+  const [adminPayments, setAdminPayments] = useState([]); // Teacher payment data
+  const [adminLogs, setAdminLogs] = useState([]); // System activity logs
+  const [adminLoading, setAdminLoading] = useState(false); // Admin data loading state
   const [adminFilters, setAdminFilters] = useState({
-    users: { role: 'all', status: 'all', search: '' },
-    lessons: { status: 'all' },
-    payments: { teacherId: '', fromDate: '', toDate: '' }
+    users: { role: 'all', status: 'all', search: '' }, // User management filters
+    lessons: { status: 'all' }, // Lesson management filters
+    payments: { teacherId: '', fromDate: '', toDate: '' } // Payment filters
   });
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [banForm, setBanForm] = useState({ reason: '', isBanned: false });
-  const [salaryReport, setSalaryReport] = useState([]);
-  const [overallTotals, setOverallTotals] = useState({});
-  const [editingRate, setEditingRate] = useState(null);
-  const [newRate, setNewRate] = useState('');
+  const [selectedUser, setSelectedUser] = useState(null); // Currently selected user for admin actions
+  const [banForm, setBanForm] = useState({ reason: '', isBanned: false }); // User ban/unban form
+  const [salaryReport, setSalaryReport] = useState([]); // Teacher salary report data
+  const [overallTotals, setOverallTotals] = useState({}); // Overall salary totals
+  const [editingRate, setEditingRate] = useState(null); // Currently editing teacher rate
+  const [newRate, setNewRate] = useState(''); // New rate input value
 
+  /**
+   * Main useEffect - Initialize user authentication and data
+   * Runs once on component mount to fetch user profile and set up authentication
+   */
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        // Try to get user from localStorage first
+        // Try to get user from localStorage first for faster initial render
         const savedUser = localStorage.getItem('user');
         if (savedUser) {
           setUser(JSON.parse(savedUser));
         }
 
-        // Also fetch fresh data from server
+        // Also fetch fresh data from server to ensure data is up-to-date
         const response = await authAPI.getProfile();
         setUser(response.user);
         localStorage.setItem('user', JSON.stringify(response.user));
@@ -155,16 +186,19 @@ const Dashboard = () => {
     fetchUserData();
   }, [navigate]);
 
-  // Auto-load data for students
+  /**
+   * Student data loading useEffect
+   * Automatically loads student-specific data when user role is Student
+   */
   useEffect(() => {
     const loadStudentData = async () => {
       if (user && user.role === 'Student') {
         try {
-          // Load conversations
+          // Load student conversations for messaging
           const conversationsData = await roleAPI.getStudentConversations();
           setStudentConversationsList(conversationsData.conversations || []);
           
-          // Load upcoming lessons
+          // Load upcoming lessons for student dashboard
           const upcomingData = await roleAPI.getStudentUpcoming();
           setUpcoming(upcomingData.lessons || []);
         } catch (error) {
@@ -577,6 +611,10 @@ const Dashboard = () => {
     try {
       const data = await adminAPI.getDashboardStats();
       setAdminStats(data.stats || {});
+      
+      // Also load users for the growth chart
+      const usersData = await adminAPI.getAllUsers({ role: 'all', status: 'all', search: '' });
+      setAdminUsers(usersData.users || []);
     } catch (error) {
       console.error('Error loading admin stats:', error);
       showError('Failed to load admin statistics');
@@ -1888,6 +1926,25 @@ const Dashboard = () => {
                           </div>
                         </div>
                       )}
+
+                      {/* Charts Section */}
+                      <div className="section" style={{ marginTop: '32px' }}>
+                        <h4 className="section-title">Data Visualizations</h4>
+                        <div style={{ marginBottom: '20px' }}>
+                          <UserGrowthChart users={adminUsers} />
+                          {/* Debug info */}
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '10px' }}>
+                            Debug: {adminUsers.length} users loaded
+                          </div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px' }}>
+                          <UserDistributionChart usersByRole={adminStats.usersByRole} />
+                          <ActiveVsBannedChart 
+                            activeUsers={adminStats.activeUsers} 
+                            bannedUsers={adminStats.bannedUsers} 
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ) },
@@ -2154,19 +2211,35 @@ const Dashboard = () => {
                                     {lesson.teacher ? (
                                       <div>
                                         <div style={{ fontWeight: '500' }}>
-                                          {lesson.teacher.firstName} {lesson.teacher.lastName}
+                                          {lesson.teacher.email}
                                         </div>
                                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                          {lesson.teacher.email}
+                                          {lesson.teacher.firstName} {lesson.teacher.lastName}
                                         </div>
                                       </div>
                                     ) : 'Unknown Teacher'}
                                   </td>
                                   <td>
-                                    <div>{lesson.studentEmail}</div>
-                                    {lesson.studentName && (
-                                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                        {lesson.studentName}
+                                    {lesson.studentEmail || lesson.student || lesson.studentId ? (
+                                      <>
+                                        <div style={{ fontWeight: '500' }}>
+                                          {lesson.studentEmail || lesson.student?.email || 'Student'}
+                                        </div>
+                                        {(lesson.studentName || lesson.student) && (
+                                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                            {lesson.studentName || 
+                                             (lesson.student ? `${lesson.student.firstName} ${lesson.student.lastName}` : '')}
+                                          </div>
+                                        )}
+                                        {lesson.studentId && !lesson.studentEmail && !lesson.student && (
+                                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                            ID: {lesson.studentId.toString().slice(-8)}
+                                          </div>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                        No student assigned
                                       </div>
                                     )}
                                   </td>
@@ -2301,6 +2374,13 @@ const Dashboard = () => {
                           </div>
                         </div>
                       )}
+
+                      {/* Salary Distribution Chart */}
+                      {salaryReport.length > 0 && (
+                        <div className="section" style={{ marginTop: '20px' }}>
+                          <SalaryDistributionChart salaryReport={salaryReport} />
+                        </div>
+                      )}
                       
                       <div className="admin-table-container" style={{ marginTop: '20px' }}>
                         {adminLoading ? (
@@ -2326,10 +2406,10 @@ const Dashboard = () => {
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div>
                                       <h5 style={{ margin: '0 0 8px 0', color: 'var(--text-primary)' }}>
-                                        {report.teacher.firstName} {report.teacher.lastName}
+                                        {report.teacher.email}
                                       </h5>
                                       <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                                        {report.teacher.email}
+                                        {report.teacher.firstName} {report.teacher.lastName}
                                       </div>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>

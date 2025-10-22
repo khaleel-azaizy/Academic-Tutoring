@@ -1,8 +1,31 @@
+/**
+ * AI Chat Component
+ * 
+ * Interactive AI tutoring interface that provides personalized educational assistance.
+ * Integrates with OpenAI to offer subject-specific tutoring, study plans, and quizzes.
+ * 
+ * Features:
+ * - Real-time AI chat interface
+ * - Subject-specific tutoring (Math, Science, English, History)
+ * - Quick action buttons for common requests
+ * - Study plan generation
+ * - Quiz creation
+ * - Concept explanations
+ * - Auto-scroll and focus management
+ * - Message history and timestamps
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {Object} props.user - Current user data for personalization
+ * @returns {JSX.Element} AI chat interface component
+ */
+
 import { useState, useRef, useEffect } from 'react';
 import { Send, ChevronDown, ChevronUp } from 'lucide-react';
 import '../styles/AIChat.css';
 
 const AIChat = ({ user }) => {
+  // Chat state management
   const [messages, setMessages] = useState([
     {
       type: 'ai',
@@ -10,13 +33,15 @@ const AIChat = ({ user }) => {
       timestamp: new Date()
     }
   ]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [selectedSubject, setSelectedSubject] = useState('general');
-  const [isLoading, setIsLoading] = useState(false);
-  const [availableSubjects, setAvailableSubjects] = useState(['general']);
-  const [showQuickActions, setShowQuickActions] = useState(true);
-  const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
+  const [inputMessage, setInputMessage] = useState(''); // Current input message
+  const [selectedSubject, setSelectedSubject] = useState('general'); // Selected subject for tutoring
+  const [isLoading, setIsLoading] = useState(false); // Loading state for AI responses
+  const [availableSubjects, setAvailableSubjects] = useState(['general']); // Available subjects
+  const [showQuickActions, setShowQuickActions] = useState(true); // Show/hide quick action buttons
+  
+  // Refs for DOM manipulation
+  const messagesEndRef = useRef(null); // Reference to scroll to bottom
+  const inputRef = useRef(null); // Reference to input field for focus
 
   // Available subjects
   const subjectOptions = [

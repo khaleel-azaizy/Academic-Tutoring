@@ -1,3 +1,23 @@
+/**
+ * Register Component
+ * 
+ * User registration form with role selection and validation.
+ * Handles account creation for all user types (Student, Parent, Teacher, Admin).
+ * 
+ * Features:
+ * - Multi-step registration process
+ * - Role-based form fields
+ * - Form validation with error messages
+ * - Password confirmation
+ * - Email validation
+ * - Phone number input (optional)
+ * - Loading states during registration
+ * - Automatic redirect after successful registration
+ * 
+ * @component
+ * @returns {JSX.Element} Registration form interface
+ */
+
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
@@ -5,8 +25,11 @@ import { useToast } from '../contexts/ToastContext';
 import '../styles/Auth.css';
 
 const Register = () => {
+  // Navigation and toast utilities
   const navigate = useNavigate();
   const { showError, showSuccess } = useToast();
+  
+  // Form state management
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -16,7 +39,7 @@ const Register = () => {
     role: '',
     phoneNumber: ''
   });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Loading state during registration
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
