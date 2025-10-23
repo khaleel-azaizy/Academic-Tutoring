@@ -90,6 +90,8 @@ const Dashboard = () => {
   const [showProfile, setShowProfile] = useState(false); // Show/hide profile modal
   const [showMessages, setShowMessages] = useState(false); // Show/hide messages sidebar
   // Lesson resources (Google Drive links)
+  // Teacher UI: manages per-lesson Drive links via a modal
+  // Student UI: displays shared links in the lesson details modal
   const [resourceLesson, setResourceLesson] = useState(null);
   const [lessonResources, setLessonResources] = useState([]);
   const [newResource, setNewResource] = useState({ label: '', url: '', description: '' });
@@ -816,7 +818,7 @@ const Dashboard = () => {
                                 </div>
                               )}
                             </div>
-                            <div className="lesson-actions">
+                            <div className="lesson-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                               {(() => {
                                 const now = new Date();
                                 const lessonTime = new Date(l.dateTime);
@@ -907,7 +909,7 @@ const Dashboard = () => {
                                   }
                                   setOpenModal('resources');
                                 }}
-                                style={{ marginLeft: 8 }}
+                                style={{ marginLeft: 0 }}
                               >
                                 <FileText className="icon" /> Share Files
                               </button>
@@ -2912,15 +2914,17 @@ const Dashboard = () => {
               ) : selectedLessonResources.length === 0 ? (
                 <div className="muted">No files shared yet.</div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {selectedLessonResources.map((r) => (
-                    <div key={r._id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <a href={r.url} target="_blank" rel="noopener noreferrer" className="auth-button btn-sm" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                <div style={{ maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {selectedLessonResources.map((r) => (
+                      <div key={r._id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <a href={r.url} target="_blank" rel="noopener noreferrer" className="auth-button btn-sm" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', whiteSpace: 'normal', wordBreak: 'break-word', maxWidth: '100%' }}>
                         <FileText className="icon" /> {r.label}
-                      </a>
-                      {r.description && <div className="muted" style={{ fontSize: '0.85rem' }}>{r.description}</div>}
-                    </div>
-                  ))}
+                        </a>
+                        {r.description && <div className="muted" style={{ fontSize: '0.85rem' }}>{r.description}</div>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -2960,25 +2964,27 @@ const Dashboard = () => {
               {lessonResources.length === 0 ? (
                 <p className="muted">No files yet. Add your first link above.</p>
               ) : (
-                <div className="list">
+                <div className="list" style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
                   {lessonResources.map((r) => (
-                    <div key={r._id} className="list-item" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div>
-                        <div>
-                          <a href={r.url} target="_blank" rel="noopener noreferrer" className="auth-button btn-sm" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                            <FileText className="icon" /> {r.label}
-                          </a>
-                        </div>
-                        {r.description && <div className="muted" style={{ fontSize: '0.85rem', marginTop: 4 }}>{r.description}</div>}
+                    <div key={r._id} className="list-item" style={{ width: '100%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                        <a href={r.url} target="_blank" rel="noopener noreferrer" className="auth-button btn-sm" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', whiteSpace: 'normal', wordBreak: 'break-word', maxWidth: '100%' }}>
+                          <FileText className="icon" /> {r.label}
+                        </a>
+                        <button className="icon-button" title="Remove" onClick={() => handleAction(async () => {
+                          await roleAPI.deleteLessonResource(resourceLesson._id, r._id);
+                          const data = await roleAPI.getLessonResources(resourceLesson._id);
+                          setLessonResources(data.resources || []);
+                          showSuccess('Link removed');
+                        })}>
+                          <Trash2 className="icon" />
+                        </button>
                       </div>
-                      <button className="icon-button" title="Remove" onClick={() => handleAction(async () => {
-                        await roleAPI.deleteLessonResource(resourceLesson._id, r._id);
-                        const data = await roleAPI.getLessonResources(resourceLesson._id);
-                        setLessonResources(data.resources || []);
-                        showSuccess('Link removed');
-                      })}>
-                        <Trash2 className="icon" />
-                      </button>
+                      {r.description && (
+                        <div className="muted" style={{ fontSize: '0.85rem', marginTop: 6 }}>
+                          {r.description}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

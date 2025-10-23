@@ -153,6 +153,7 @@ export const roleAPI = {
       throw error.response?.data || error.message;
     }
   },
+  // Mark a lesson complete when no clock in/out was used, with worked minutes
   completeLesson: async (lessonId, workedMinutes) => {
     try {
       const res = await api.post('/teacher/lessons/complete', { lessonId, workedMinutes });
@@ -162,6 +163,7 @@ export const roleAPI = {
     }
   },
   // Lesson resource links (Google Drive) - Teacher
+  // Add/list/delete links per lesson; server enforces teacher ownership & simple validation
   getLessonResources: async (lessonId) => {
     try {
       const res = await api.get(`/teacher/lessons/${lessonId}/resources`);
@@ -442,6 +444,7 @@ export const roleAPI = {
 
 // Admin API methods
 export const studentAPI = {
+  // Student dashboard upcoming lessons
   getUpcomingLessons: async () => {
     try {
       const res = await api.get('/student/lessons/upcoming');
@@ -450,6 +453,7 @@ export const studentAPI = {
       throw error.response?.data || error.message;
     }
   },
+  // Fetch shared resource links for a specific lesson the student is assigned to
   getLessonResources: async (lessonId) => {
     try {
       const res = await api.get(`/student/lessons/${lessonId}/resources`);

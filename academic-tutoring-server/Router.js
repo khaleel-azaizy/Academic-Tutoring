@@ -530,6 +530,8 @@ app.get('/api/teacher/schedule', authenticateToken, authorizeRole('Teacher'), as
 });
 
 // Teacher: add a Google Drive (or external) resource link to a lesson
+// Stores minimal metadata for a link shared with the student for a specific lesson.
+// Security: the teacher must own the lesson; we do not proxy the file, only store the URL.
 app.post('/api/teacher/lessons/:lessonId/resources', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
   try {
     const { lessonId } = req.params;
@@ -571,6 +573,7 @@ app.post('/api/teacher/lessons/:lessonId/resources', authenticateToken, authoriz
 });
 
 // Teacher: list resource links for a lesson
+// Returns all non-deleted resource entries tied to the lesson owned by the teacher.
 app.get('/api/teacher/lessons/:lessonId/resources', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
   try {
     const { lessonId } = req.params;
@@ -596,6 +599,7 @@ app.get('/api/teacher/lessons/:lessonId/resources', authenticateToken, authorize
 });
 
 // Teacher: delete a resource link for a lesson (soft delete)
+// We soft-delete by setting deletedAt to keep auditability and avoid dangling references.
 app.delete('/api/teacher/lessons/:lessonId/resources/:resourceId', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
   try {
     const { lessonId, resourceId } = req.params;
@@ -624,6 +628,7 @@ app.delete('/api/teacher/lessons/:lessonId/resources/:resourceId', authenticateT
 });
 
 // Student: list resource links for their own lesson
+// Security: the student must be the one assigned to the lesson; only non-deleted links return.
 app.get('/api/student/lessons/:lessonId/resources', authenticateToken, authorizeRole('Student'), async (req, res) => {
   try {
     const { lessonId } = req.params;
