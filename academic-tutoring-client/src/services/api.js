@@ -1,30 +1,8 @@
-/**
- * API Service Layer
- * 
- * Centralized API communication layer for the frontend application.
- * Handles all HTTP requests to the backend with proper error handling and authentication.
- * 
- * Features:
- * - Axios-based HTTP client with interceptors
- * - Automatic error handling and authentication
- * - Organized API endpoints by functionality
- * - Cookie-based authentication support
- * - Centralized error handling
- * 
- * @file api.js
- * @version 1.0.0
- * @author Academic Tutoring Team
- */
-
 import axios from 'axios';
 
-// Backend API base URL
 const API_BASE_URL = 'http://localhost:4000/api';
 
-/**
- * Create axios instance with default configuration
- * Includes credentials for cookie-based authentication
- */
+// Create axios instance with default config
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true, // Important for cookies
@@ -33,15 +11,12 @@ const api = axios.create({
   }
 });
 
-/**
- * Response interceptor for global error handling
- * Automatically handles 401 unauthorized responses by redirecting to login
- */
+// Add response interceptor to handle errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized access - clear user data and redirect to login
+      // Handle unauthorized access
       localStorage.removeItem('user');
       window.location.href = '/login';
     }
@@ -181,6 +156,31 @@ export const roleAPI = {
   completeLesson: async (lessonId, workedMinutes) => {
     try {
       const res = await api.post('/teacher/lessons/complete', { lessonId, workedMinutes });
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  // Lesson resource links (Google Drive) - Teacher
+  getLessonResources: async (lessonId) => {
+    try {
+      const res = await api.get(`/teacher/lessons/${lessonId}/resources`);
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  addLessonResource: async (lessonId, payload) => {
+    try {
+      const res = await api.post(`/teacher/lessons/${lessonId}/resources`, payload);
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  deleteLessonResource: async (lessonId, resourceId) => {
+    try {
+      const res = await api.delete(`/teacher/lessons/${lessonId}/resources/${resourceId}`);
       return res.data;
     } catch (error) {
       throw error.response?.data || error.message;
@@ -433,6 +433,26 @@ export const roleAPI = {
   deleteAccount: async () => {
     try {
       const res = await api.delete('/profile');
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  }
+};
+
+// Admin API methods
+export const studentAPI = {
+  getUpcomingLessons: async () => {
+    try {
+      const res = await api.get('/student/lessons/upcoming');
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  getLessonResources: async (lessonId) => {
+    try {
+      const res = await api.get(`/student/lessons/${lessonId}/resources`);
       return res.data;
     } catch (error) {
       throw error.response?.data || error.message;

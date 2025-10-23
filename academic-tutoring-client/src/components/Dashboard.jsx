@@ -19,7 +19,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authAPI, roleAPI, adminAPI } from '../services/api';
+import { authAPI, roleAPI, adminAPI, studentAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import Modal from './Modal';
 import Tabs from './Tabs';
@@ -89,6 +89,12 @@ const Dashboard = () => {
   const [teacherChatForm, setTeacherChatForm] = useState({ message: '' }); // Chat message input form
   const [showProfile, setShowProfile] = useState(false); // Show/hide profile modal
   const [showMessages, setShowMessages] = useState(false); // Show/hide messages sidebar
+  // Lesson resources (Google Drive links)
+  const [resourceLesson, setResourceLesson] = useState(null);
+  const [lessonResources, setLessonResources] = useState([]);
+  const [newResource, setNewResource] = useState({ label: '', url: '', description: '' });
+  const [resourcesLoading, setResourcesLoading] = useState({});
+  const [lessonResourcesById, setLessonResourcesById] = useState({});
 
   // ==================== PARENT STATE ====================
   const [searchQuery, setSearchQuery] = useState(''); // Teacher search query
@@ -124,12 +130,17 @@ const Dashboard = () => {
   // Tooltip state for lesson hover effects
   const [hoveredLesson, setHoveredLesson] = useState(null); // Currently hovered lesson
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 }); // Tooltip position coordinates
+  const [tooltipHideTimer, setTooltipHideTimer] = useState(null); // Delay hide to allow moving into tooltip
+  const [isTooltipPinned, setIsTooltipPinned] = useState(false); // Click to pin tooltip open
   
   // Month navigation state for calendar views
   const [monthOffset, setMonthOffset] = useState(0); // 0 = current month, -1 = previous, +1 = next, etc.
 
   // ==================== STUDENT STATE ====================
   const [upcoming, setUpcoming] = useState([]); // Student's upcoming lessons
+  const [selectedLesson, setSelectedLesson] = useState(null); // Clicked lesson for details modal
+  const [selectedLessonResources, setSelectedLessonResources] = useState([]);
+  const [selectedLessonLoading, setSelectedLessonLoading] = useState(false);
   const [contactForm, setContactForm] = useState({ teacherEmail: '', message: '' }); // Form for contacting teacher
   const [studentConversation, setStudentConversation] = useState({ teacher: null, messages: [] }); // Active student conversation
   const [studentConversationsList, setStudentConversationsList] = useState([]); // List of student conversations
@@ -591,14 +602,42 @@ const Dashboard = () => {
   // Handle lesson hover
   const handleLessonHover = (lesson, event) => {
     setHoveredLesson(lesson);
-    setTooltipPosition({
-      x: event.clientX,
-      y: event.clientY
-    });
+    // Position tooltip near the badge but not follow the mouse constantly
+    const rect = event.currentTarget?.getBoundingClientRect?.();
+    const baseX = rect ? rect.left + rect.width + 12 : event.clientX + 12;
+    const baseY = rect ? rect.top + rect.height / 2 : event.clientY - 10;
+    setTooltipPosition({ x: baseX, y: baseY });
+    // If a hide timer is pending, cancel it so tooltip stays while moving into it
+    if (tooltipHideTimer) {
+      clearTimeout(tooltipHideTimer);
+      setTooltipHideTimer(null);
+    }
+    setIsTooltipPinned(false);
+    if (user?.role === 'Student' && lesson && lesson._id && !lessonResourcesById[lesson._id] && !resourcesLoading[lesson._id]) {
+      setResourcesLoading(prev => ({ ...prev, [lesson._id]: true }));
+      (async () => {
+        try {
+          const data = await studentAPI.getLessonResources(lesson._id);
+          setLessonResourcesById(prev => ({ ...prev, [lesson._id]: data.resources || [] }));
+        } catch (e) {
+          // ignore in tooltip
+        } finally {
+          setResourcesLoading(prev => ({ ...prev, [lesson._id]: false }));
+        }
+      })();
+    }
   };
 
   const handleLessonLeave = () => {
-    setHoveredLesson(null);
+    // Delay hide to allow cursor to enter tooltip
+    if (tooltipHideTimer) clearTimeout(tooltipHideTimer);
+    const t = setTimeout(() => {
+      if (!isTooltipPinned) {
+        setHoveredLesson(null);
+      }
+      setTooltipHideTimer(null);
+    }, 400);
+    setTooltipHideTimer(t);
   };
 
   // Month navigation functions
@@ -855,6 +894,23 @@ const Dashboard = () => {
                                   </div>
                                 );
                               })()}
+                              {/* Share Files button for teachers to add Drive links */}
+                              <button
+                                className="auth-button btn-sm"
+                                onClick={async () => {
+                                  setResourceLesson(l);
+                                  try {
+                                    const data = await roleAPI.getLessonResources(l._id);
+                                    setLessonResources(data.resources || []);
+                                  } catch (e) {
+                                    setLessonResources([]);
+                                  }
+                                  setOpenModal('resources');
+                                }}
+                                style={{ marginLeft: 8 }}
+                              >
+                                <FileText className="icon" /> Share Files
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -2666,9 +2722,19 @@ const Dashboard = () => {
                                       <div
                                         key={li}
                                         className={`mini-lesson-badge status-${lesson.status}`}
-                                        onMouseEnter={(e) => handleLessonHover(lesson, e)}
-                                        onMouseLeave={handleLessonLeave}
-                                        onMouseMove={(e) => setTooltipPosition({ x: e.clientX, y: e.clientY })}
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          setSelectedLesson(lesson);
+                                          setSelectedLessonLoading(true);
+                                          try {
+                                            const data = await studentAPI.getLessonResources(lesson._id);
+                                            setSelectedLessonResources(data.resources || []);
+                                          } catch (err) {
+                                            setSelectedLessonResources([]);
+                                          } finally {
+                                            setSelectedLessonLoading(false);
+                                          }
+                                        }}
                                       >
                                         <span className="mini-lesson-time">{lessonTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
                                         <span className="mini-lesson-subject">{lesson.subject || 'Lesson'}</span>
@@ -2727,8 +2793,30 @@ const Dashboard = () => {
       <div 
         className="lesson-tooltip"
         style={{
-          left: tooltipPosition.x + 10,
-          top: tooltipPosition.y - 10,
+          left: tooltipPosition.x,
+          top: tooltipPosition.y,
+          zIndex: 9999,
+          pointerEvents: 'auto'
+        }}
+        onMouseEnter={() => {
+          if (tooltipHideTimer) {
+            clearTimeout(tooltipHideTimer);
+            setTooltipHideTimer(null);
+          }
+        }}
+        onMouseLeave={() => {
+          if (tooltipHideTimer) clearTimeout(tooltipHideTimer);
+          const t = setTimeout(() => {
+            if (!isTooltipPinned) {
+              setHoveredLesson(null);
+            }
+            setTooltipHideTimer(null);
+          }, 400);
+          setTooltipHideTimer(t);
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsTooltipPinned((prev) => !prev);
         }}
       >
         <div className="tooltip-content">
@@ -2772,6 +2860,28 @@ const Dashboard = () => {
                 <strong>Description:</strong> {hoveredLesson.description}
               </div>
             )}
+
+            {/* Shared Files (Student view) */}
+            {user?.role === 'Student' && (
+              <div className="tooltip-resources" style={{ marginTop: 8 }}>
+                <strong>Shared Files:</strong>
+                {resourcesLoading[hoveredLesson._id] && !lessonResourcesById[hoveredLesson._id] ? (
+                  <div className="muted">Loading...</div>
+                ) : (
+                  <div className="resource-links" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                    {(lessonResourcesById[hoveredLesson._id] || []).length === 0 ? (
+                      <span className="muted">None yet</span>
+                    ) : (
+                      (lessonResourcesById[hoveredLesson._id] || []).map((r) => (
+                        <a key={r._id} href={r.url} target="_blank" rel="noopener noreferrer" className="mini-link">
+                          {r.label}
+                        </a>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2780,6 +2890,104 @@ const Dashboard = () => {
 
   const renderModals = () => (
     <>
+      {/* Student: Lesson Details modal */}
+      <Modal isOpen={!!selectedLesson} title={selectedLesson ? `Lesson Details • ${selectedLesson.subject || ''}` : 'Lesson Details'} onClose={() => { setSelectedLesson(null); setSelectedLessonResources([]); }}>
+        {!selectedLesson ? null : (
+          <>
+            <div className="section">
+              <div><strong>Date & Time:</strong> {new Date(selectedLesson.dateTime).toLocaleString()}</div>
+              <div><strong>Duration:</strong> {selectedLesson.durationMinutes || 60} minutes</div>
+              {selectedLesson.teacherName && <div><strong>Teacher:</strong> {selectedLesson.teacherName}</div>}
+              {selectedLesson.description && <div><strong>Description:</strong> {selectedLesson.description}</div>}
+              {selectedLesson.teacherMeetingLink && (
+                <div style={{ marginTop: 8 }}>
+                  <a href={selectedLesson.teacherMeetingLink} className="auth-button btn-sm" target="_blank" rel="noopener noreferrer"><Video className="icon" /> Open Meeting</a>
+                </div>
+              )}
+            </div>
+            <div className="section" style={{ marginTop: 12 }}>
+              <h4 className="section-title"><FileText className="icon" /> Shared Files</h4>
+              {selectedLessonLoading ? (
+                <div className="muted">Loading resources...</div>
+              ) : selectedLessonResources.length === 0 ? (
+                <div className="muted">No files shared yet.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {selectedLessonResources.map((r) => (
+                    <div key={r._id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <a href={r.url} target="_blank" rel="noopener noreferrer" className="auth-button btn-sm" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        <FileText className="icon" /> {r.label}
+                      </a>
+                      {r.description && <div className="muted" style={{ fontSize: '0.85rem' }}>{r.description}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </Modal>
+      {/* Lesson Resources (Teacher) */}
+      <Modal isOpen={openModal === 'resources'} title={`Share Files${resourceLesson ? ` • ${resourceLesson.subject || ''}` : ''}`} onClose={() => setOpenModal(null)}>
+        {!resourceLesson ? (
+          <p className="muted">Select a lesson to manage its shared files.</p>
+        ) : (
+          <>
+            <div className="form-group">
+              <label className="form-label">Link Label</label>
+              <input className="form-input" value={newResource.label} onChange={(e) => setNewResource({ ...newResource, label: e.target.value })} placeholder="e.g., Chapter 3 Worksheet" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Google Drive Link</label>
+              <input className="form-input" value={newResource.url} onChange={(e) => setNewResource({ ...newResource, url: e.target.value })} placeholder="https://drive.google.com/..." />
+              <div className="form-hint">Make sure the Drive link is set to "Anyone with the link can view".</div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Note (optional)</label>
+              <input className="form-input" value={newResource.description} onChange={(e) => setNewResource({ ...newResource, description: e.target.value })} placeholder="Short context for the student" />
+            </div>
+            <button className="auth-button" disabled={!newResource.label || !newResource.url} onClick={() => handleAction(async () => {
+              const payload = { ...newResource };
+              await roleAPI.addLessonResource(resourceLesson._id, payload);
+              const data = await roleAPI.getLessonResources(resourceLesson._id);
+              setLessonResources(data.resources || []);
+              setNewResource({ label: '', url: '', description: '' });
+              showSuccess('Link added');
+            })}>Add Link</button>
+
+            <div className="section" style={{ marginTop: 16 }}>
+              <h4 className="section-title"><FileText className="icon" /> Shared Links</h4>
+              {lessonResources.length === 0 ? (
+                <p className="muted">No files yet. Add your first link above.</p>
+              ) : (
+                <div className="list">
+                  {lessonResources.map((r) => (
+                    <div key={r._id} className="list-item" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div>
+                          <a href={r.url} target="_blank" rel="noopener noreferrer" className="auth-button btn-sm" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                            <FileText className="icon" /> {r.label}
+                          </a>
+                        </div>
+                        {r.description && <div className="muted" style={{ fontSize: '0.85rem', marginTop: 4 }}>{r.description}</div>}
+                      </div>
+                      <button className="icon-button" title="Remove" onClick={() => handleAction(async () => {
+                        await roleAPI.deleteLessonResource(resourceLesson._id, r._id);
+                        const data = await roleAPI.getLessonResources(resourceLesson._id);
+                        setLessonResources(data.resources || []);
+                        showSuccess('Link removed');
+                      })}>
+                        <Trash2 className="icon" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </Modal>
+
       <Modal isOpen={openModal === 'hours'} title="Report Working Hours" onClose={() => setOpenModal(null)}>
         <div className="form-group">
           <label className="form-label">Date</label>
