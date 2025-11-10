@@ -8,6 +8,9 @@ const cookieParser = require('cookie-parser');
 const { ObjectId } = require('mongodb');
 const e = require('express');
 const aiTutorService = require('./services/aiTutorService');
+const { upload, uploadsDir } = require('./fileUpload');
+const path = require('path');
+const fs = require('fs');
 
 const app = express()
 app.use(express.json())
@@ -256,6 +259,117 @@ const authorizeRole = (...roles) => {
     next();
   };
 };
+
+// =========================
+// File Upload & Download Routes
+// =========================
+
+// Upload file (accessible to all authenticated users)
+app.post('/api/upload', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const fileData = {
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      uploadedBy: new ObjectId(req.user._id),
+      uploadedAt: new Date(),
+      path: req.file.path
+    };
+
+    // Store file metadata in database
+    const result = await db.collection('files').insertOne(fileData);
+    
+    res.status(201).json({
+      message: 'File uploaded successfully',
+      file: {
+        _id: result.insertedId,
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+        url: `/api/files/${req.file.filename}`
+      }
+    });
+  } catch (error) {
+    console.error('File upload error:', error);
+    res.status(500).json({ error: 'Failed to upload file' });
+  }
+});
+
+// Download/serve file (accessible to authenticated users)
+// Uses optional authentication - checks token from header OR cookie
+app.get('/api/files/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    
+    // Security: validate filename to prevent directory traversal
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+
+    const filePath = path.join(uploadsDir, filename);
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Try to authenticate user (from header token or cookie)
+    let authenticated = false;
+    const token = req.headers.authorization?.split(' ')[1] || req.cookies?.token;
+    
+    if (token) {
+      try {
+        jwt.verify(token, JWT_SECRET);
+        authenticated = true;
+      } catch (err) {
+        // Token invalid but continue - we'll check file access permissions below
+      }
+    }
+
+    // Get file metadata from database
+    const fileMetadata = await db.collection('files').findOne({ filename });
+    
+    if (!fileMetadata) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // For lesson resources, check if file is associated with a lesson resource
+    // This allows students to access files shared in their lessons
+    const lessonResource = await db.collection('lesson_resources').findOne({ 
+      filename: filename,
+      deletedAt: { $exists: false }
+    });
+
+    if (lessonResource) {
+      // File is a lesson resource - allow access if user is authenticated
+      if (!authenticated) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      // Allow access to lesson files for authenticated users
+    } else {
+      // For message attachments, require authentication
+      if (!authenticated) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+    }
+
+    // Send file with proper content type
+    res.setHeader('Content-Type', fileMetadata.mimetype);
+    res.setHeader('Content-Disposition', `inline; filename="${fileMetadata.originalName}"`);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('File download error:', error);
+    res.status(500).json({ error: 'Failed to download file' });
+  }
+});
 
 // Example protected route for employees only
 app.get('/api/employee-dashboard', authenticateToken, authorizeRole('Teacher'), (req, res) => {
@@ -529,19 +643,16 @@ app.get('/api/teacher/schedule', authenticateToken, authorizeRole('Teacher'), as
   }
 });
 
-// Teacher: add a Google Drive (or external) resource link to a lesson
-// Stores minimal metadata for a link shared with the student for a specific lesson.
-// Security: the teacher must own the lesson; we do not proxy the file, only store the URL.
-app.post('/api/teacher/lessons/:lessonId/resources', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
+// Teacher: add a resource (file or link) to a lesson
+// Supports both file uploads and external links (Google Drive, etc.)
+// Security: the teacher must own the lesson
+app.post('/api/teacher/lessons/:lessonId/resources', authenticateToken, authorizeRole('Teacher'), upload.single('file'), async (req, res) => {
   try {
     const { lessonId } = req.params;
     const { label, url, description } = req.body || {};
 
     if (!ObjectId.isValid(lessonId)) {
       return res.status(400).json({ error: 'Invalid lessonId' });
-    }
-    if (!label || !url) {
-      return res.status(400).json({ error: 'label and url are required' });
     }
 
     const lesson = await db.collection('lessons').findOne({
@@ -552,23 +663,67 @@ app.post('/api/teacher/lessons/:lessonId/resources', authenticateToken, authoriz
       return res.status(404).json({ error: 'Lesson not found or you do not have access' });
     }
 
-    const resource = {
-      lessonId: lesson._id,
-      teacherId: lesson.teacherId,
-      studentId: lesson.studentId || null,
-      label: String(label).trim(),
-      url: String(url).trim(),
-      description: description ? String(description).trim() : '',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    let resource;
+
+    // Check if file was uploaded
+    if (req.file) {
+      // File upload
+      const fileData = {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        uploadedBy: new ObjectId(req.user._id),
+        uploadedAt: new Date(),
+        path: req.file.path
+      };
+
+      // Store file metadata
+      const fileResult = await db.collection('files').insertOne(fileData);
+
+      resource = {
+        lessonId: lesson._id,
+        teacherId: lesson.teacherId,
+        studentId: lesson.studentId || null,
+        label: label ? String(label).trim() : req.file.originalname,
+        type: 'file',
+        fileId: fileResult.insertedId,
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        fileSize: req.file.size,
+        mimetype: req.file.mimetype,
+        url: `/api/files/${req.file.filename}`,
+        description: description ? String(description).trim() : '',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    } else if (url) {
+      // External link
+      if (!label) {
+        return res.status(400).json({ error: 'label is required for links' });
+      }
+
+      resource = {
+        lessonId: lesson._id,
+        teacherId: lesson.teacherId,
+        studentId: lesson.studentId || null,
+        label: String(label).trim(),
+        type: 'link',
+        url: String(url).trim(),
+        description: description ? String(description).trim() : '',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    } else {
+      return res.status(400).json({ error: 'Either file or url is required' });
+    }
 
     const result = await db.collection('lesson_resources').insertOne(resource);
     resource._id = result.insertedId;
-    return res.status(201).json({ message: 'Resource link saved', resource });
+    return res.status(201).json({ message: 'Resource saved', resource });
   } catch (error) {
     console.error('Add lesson resource error:', error);
-    return res.status(500).json({ error: 'Failed to save resource link' });
+    return res.status(500).json({ error: 'Failed to save resource' });
   }
 });
 
@@ -1202,22 +1357,49 @@ app.delete('/api/parent/lessons/:id', authenticateToken, authorizeRole('Parent')
 });
 
 // Contact a teacher
-app.post('/api/student/contact-teacher', authenticateToken, authorizeRole('Student'), async (req, res) => {
+app.post('/api/student/contact-teacher', authenticateToken, authorizeRole('Student'), upload.single('file'), async (req, res) => {
   try {
     const { teacherEmail, message } = req.body || {};
-    if (!teacherEmail || !message) {
-      return res.status(400).json({ error: 'teacherEmail and message are required' });
+    // Require either a message or a file attachment
+    if (!teacherEmail || (!message && !req.file)) {
+      return res.status(400).json({ error: 'teacherEmail and either message or file are required' });
     }
     const teacher = await db.collection('users').findOne({ email: teacherEmail.toLowerCase(), role: 'Teacher' }, { projection: { password: 0 } });
     if (!teacher) {
       return res.status(404).json({ error: 'Teacher not found' });
     }
+
     const msg = {
       fromStudentId: new ObjectId(req.user._id),
       toTeacherId: new ObjectId(teacher._id),
-      message: message.toString(),
+      message: message ? message.toString() : '',
       createdAt: new Date()
     };
+
+    // Handle file attachment if present
+    if (req.file) {
+      const fileData = {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        uploadedBy: new ObjectId(req.user._id),
+        uploadedAt: new Date(),
+        path: req.file.path
+      };
+
+      const fileResult = await db.collection('files').insertOne(fileData);
+      
+      msg.attachment = {
+        fileId: fileResult.insertedId,
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        fileSize: req.file.size,
+        mimetype: req.file.mimetype,
+        url: `/api/files/${req.file.filename}`
+      };
+    }
+
     const result = await db.collection('messages').insertOne(msg);
     return res.status(201).json({ message: 'Message sent', id: result.insertedId });
   } catch (error) {
@@ -1316,6 +1498,156 @@ app.get('/api/student/conversations', authenticateToken, authorizeRole('Student'
     return res.json({ conversations: convos });
   } catch (error) {
     console.error('Student conversations error:', error);
+    return res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+// =========================
+// Parent Messaging Endpoints
+// =========================
+
+// Parent: Contact a teacher
+app.post('/api/parent/contact-teacher', authenticateToken, authorizeRole('Parent'), upload.single('file'), async (req, res) => {
+  try {
+    const { teacherEmail, message } = req.body || {};
+    // Require either a message or a file attachment
+    if (!teacherEmail || (!message && !req.file)) {
+      return res.status(400).json({ error: 'teacherEmail and either message or file are required' });
+    }
+    const teacher = await db.collection('users').findOne({ email: teacherEmail.toLowerCase(), role: 'Teacher' }, { projection: { password: 0 } });
+    if (!teacher) {
+      return res.status(404).json({ error: 'Teacher not found' });
+    }
+
+    const msg = {
+      fromParentId: new ObjectId(req.user._id),
+      toTeacherId: new ObjectId(teacher._id),
+      message: message ? message.toString() : '',
+      createdAt: new Date()
+    };
+
+    // Handle file attachment if present
+    if (req.file) {
+      const fileData = {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        uploadedBy: new ObjectId(req.user._id),
+        uploadedAt: new Date(),
+        path: req.file.path
+      };
+
+      const fileResult = await db.collection('files').insertOne(fileData);
+      
+      msg.attachment = {
+        fileId: fileResult.insertedId,
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        fileSize: req.file.size,
+        mimetype: req.file.mimetype,
+        url: `/api/files/${req.file.filename}`
+      };
+    }
+
+    const result = await db.collection('messages').insertOne(msg);
+    return res.status(201).json({ message: 'Message sent', id: result.insertedId });
+  } catch (error) {
+    console.error('Parent contact error:', error);
+    return res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Parent: Get conversation with a teacher
+app.get('/api/parent/messages', authenticateToken, authorizeRole('Parent'), async (req, res) => {
+  try {
+    const { teacherEmail, teacherId } = req.query || {};
+    let teacher;
+    if (teacherId && ObjectId.isValid(String(teacherId))) {
+      teacher = await db.collection('users').findOne({ _id: new ObjectId(String(teacherId)), role: 'Teacher' });
+    } else if (teacherEmail) {
+      teacher = await db.collection('users').findOne({ email: String(teacherEmail).toLowerCase(), role: 'Teacher' });
+    }
+    if (!teacher) {
+      return res.status(404).json({ error: 'Teacher not found' });
+    }
+    const msgs = await db.collection('messages').find({
+      $or: [
+        { fromParentId: new ObjectId(req.user._id), toTeacherId: new ObjectId(teacher._id) },
+        { fromTeacherId: new ObjectId(teacher._id), toParentId: new ObjectId(req.user._id) }
+      ]
+    }).sort({ createdAt: 1 }).toArray();
+    return res.json({ messages: msgs, teacher: { id: teacher._id, email: teacher.email, firstName: teacher.firstName, lastName: teacher.lastName } });
+  } catch (error) {
+    console.error('Parent conversation error:', error);
+    return res.status(500).json({ error: 'Failed to fetch conversation' });
+  }
+});
+
+// Parent: List conversations
+app.get('/api/parent/conversations', authenticateToken, authorizeRole('Parent'), async (req, res) => {
+  try {
+    const parentId = new ObjectId(req.user._id);
+    const pipeline = [
+      {
+        $match: {
+          $or: [
+            { fromParentId: parentId },
+            { toParentId: parentId }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          convTeacherId: {
+            $cond: [
+              { $ifNull: ["$toTeacherId", false] },
+              "$toTeacherId",
+              "$fromTeacherId"
+            ]
+          }
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: "$convTeacherId",
+          lastMessage: { $first: "$message" },
+          lastAt: { $first: "$createdAt" },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'teacher'
+        }
+      },
+      { $unwind: "$teacher" },
+      {
+        $project: {
+          teacherId: '$_id',
+          _id: 0,
+          lastMessage: 1,
+          lastAt: 1,
+          count: 1,
+          teacher: {
+            _id: '$teacher._id',
+            email: '$teacher.email',
+            firstName: '$teacher.firstName',
+            lastName: '$teacher.lastName'
+          }
+        }
+      },
+      { $sort: { lastAt: -1 } }
+    ];
+
+    const convos = await db.collection('messages').aggregate(pipeline).toArray();
+    return res.json({ conversations: convos });
+  } catch (error) {
+    console.error('Parent conversations error:', error);
     return res.status(500).json({ error: 'Failed to fetch conversations' });
   }
 });
@@ -1660,16 +1992,18 @@ app.post('/api/teacher/messages/mark-read', authenticateToken, authorizeRole('Te
   }
 });
 
-// Get teacher conversations grouped by student
+// Get teacher conversations grouped by student and parent
 app.get('/api/teacher/conversations', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
   try {
     const teacherId = new ObjectId(req.user._id);
-    const pipeline = [
+    
+    // Get student conversations
+    const studentPipeline = [
       {
         $match: {
           $or: [
-            { toTeacherId: teacherId },
-            { fromTeacherId: teacherId }
+            { toTeacherId: teacherId, fromStudentId: { $exists: true } },
+            { fromTeacherId: teacherId, toStudentId: { $exists: true } }
           ]
         }
       },
@@ -1711,6 +2045,7 @@ app.get('/api/teacher/conversations', authenticateToken, authorizeRole('Teacher'
           lastAt: 1,
           count: 1,
           unreadCount: 1,
+          type: { $literal: 'student' },
           student: {
             _id: '$student._id',
             email: '$student.email',
@@ -1718,12 +2053,75 @@ app.get('/api/teacher/conversations', authenticateToken, authorizeRole('Teacher'
             lastName: '$student.lastName'
           }
         }
-      },
-      { $sort: { lastAt: -1 } }
+      }
     ];
 
-    const convos = await db.collection('messages').aggregate(pipeline).toArray();
-    return res.json({ conversations: convos });
+    // Get parent conversations
+    const parentPipeline = [
+      {
+        $match: {
+          $or: [
+            { toTeacherId: teacherId, fromParentId: { $exists: true } },
+            { fromTeacherId: teacherId, toParentId: { $exists: true } }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          convParentId: {
+            $cond: [
+              { $ifNull: ["$toParentId", false] },
+              "$toParentId",
+              "$fromParentId"
+            ]
+          }
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: "$convParentId",
+          lastMessage: { $first: "$message" },
+          lastAt: { $first: "$createdAt" },
+          count: { $sum: 1 },
+          unreadCount: { $sum: { $cond: [{ $and: ["$toTeacherId", { $ne: ["$read", true] }] }, 1, 0] } }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'parent'
+        }
+      },
+      { $unwind: "$parent" },
+      {
+        $project: {
+          parentId: '$_id',
+          _id: 0,
+          lastMessage: 1,
+          lastAt: 1,
+          count: 1,
+          unreadCount: 1,
+          type: { $literal: 'parent' },
+          parent: {
+            _id: '$parent._id',
+            email: '$parent.email',
+            firstName: '$parent.firstName',
+            lastName: '$parent.lastName'
+          }
+        }
+      }
+    ];
+
+    const studentConvos = await db.collection('messages').aggregate(studentPipeline).toArray();
+    const parentConvos = await db.collection('messages').aggregate(parentPipeline).toArray();
+    
+    // Combine and sort by lastAt
+    const allConvos = [...studentConvos, ...parentConvos].sort((a, b) => b.lastAt - a.lastAt);
+    
+    return res.json({ conversations: allConvos });
   } catch (error) {
     console.error('Teacher conversations error:', error);
     return res.status(500).json({ error: 'Failed to fetch conversations' });
@@ -1765,29 +2163,65 @@ app.get('/api/teacher/conversation', authenticateToken, authorizeRole('Teacher')
 });
 
 // Teacher reply to student
-app.post('/api/teacher/reply', authenticateToken, authorizeRole('Teacher'), async (req, res) => {
+app.post('/api/teacher/reply', authenticateToken, authorizeRole('Teacher'), upload.single('file'), async (req, res) => {
   try {
-    const { studentId, message } = req.body || {};
-    if (!studentId || !message) {
-      return res.status(400).json({ error: 'studentId and message are required' });
+    const { studentId, parentId, message } = req.body || {};
+    // Require either a message or a file attachment
+    if ((!studentId && !parentId) || (!message && !req.file)) {
+      return res.status(400).json({ error: 'Either studentId or parentId, and either message or file are required' });
     }
 
     const teacherId = new ObjectId(req.user._id);
-    const studentObjectId = new ObjectId(studentId);
-
-    // Verify student exists
-    const student = await db.collection('users').findOne({ _id: studentObjectId, role: 'Student' });
-    if (!student) {
-      return res.status(404).json({ error: 'Student not found' });
-    }
 
     const messageDoc = {
       fromTeacherId: teacherId,
-      toStudentId: studentObjectId,
-      message: message,
+      message: message || '',
       read: false,
       createdAt: new Date()
     };
+
+    // Determine if replying to student or parent
+    if (studentId) {
+      const studentObjectId = new ObjectId(studentId);
+      // Verify student exists
+      const student = await db.collection('users').findOne({ _id: studentObjectId, role: 'Student' });
+      if (!student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+      messageDoc.toStudentId = studentObjectId;
+    } else {
+      const parentObjectId = new ObjectId(parentId);
+      // Verify parent exists
+      const parent = await db.collection('users').findOne({ _id: parentObjectId, role: 'Parent' });
+      if (!parent) {
+        return res.status(404).json({ error: 'Parent not found' });
+      }
+      messageDoc.toParentId = parentObjectId;
+    }
+
+    // Handle file attachment if present
+    if (req.file) {
+      const fileData = {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        uploadedBy: teacherId,
+        uploadedAt: new Date(),
+        path: req.file.path
+      };
+
+      const fileResult = await db.collection('files').insertOne(fileData);
+      
+      messageDoc.attachment = {
+        fileId: fileResult.insertedId,
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        fileSize: req.file.size,
+        mimetype: req.file.mimetype,
+        url: `/api/files/${req.file.filename}`
+      };
+    }
 
     const result = await db.collection('messages').insertOne(messageDoc);
     return res.status(201).json({ message: 'Reply sent', id: result.insertedId });

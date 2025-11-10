@@ -94,7 +94,7 @@ const Dashboard = () => {
   // Student UI: displays shared links in the lesson details modal
   const [resourceLesson, setResourceLesson] = useState(null);
   const [lessonResources, setLessonResources] = useState([]);
-  const [newResource, setNewResource] = useState({ label: '', url: '', description: '' });
+  const [newResource, setNewResource] = useState({ label: '', url: '', description: '', file: null });
   const [resourcesLoading, setResourcesLoading] = useState({});
   const [lessonResourcesById, setLessonResourcesById] = useState({});
 
@@ -2875,7 +2875,7 @@ const Dashboard = () => {
                       <span className="muted">None yet</span>
                     ) : (
                       (lessonResourcesById[hoveredLesson._id] || []).map((r) => (
-                        <a key={r._id} href={r.url} target="_blank" rel="noopener noreferrer" className="mini-link">
+                        <a key={r._id} href={r.type === 'file' ? `http://localhost:4000${r.url}` : r.url} target="_blank" rel="noopener noreferrer" className="mini-link">
                           {r.label}
                         </a>
                       ))
@@ -2918,7 +2918,7 @@ const Dashboard = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {selectedLessonResources.map((r) => (
                       <div key={r._id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <a href={r.url} target="_blank" rel="noopener noreferrer" className="auth-button btn-sm" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', whiteSpace: 'normal', wordBreak: 'break-word', maxWidth: '100%' }}>
+                        <a href={r.type === 'file' ? `http://localhost:4000${r.url}` : r.url} target="_blank" rel="noopener noreferrer" className="auth-button btn-sm" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', whiteSpace: 'normal', wordBreak: 'break-word', maxWidth: '100%' }}>
                         <FileText className="icon" /> {r.label}
                         </a>
                         {r.description && <div className="muted" style={{ fontSize: '0.85rem' }}>{r.description}</div>}
@@ -2937,6 +2937,63 @@ const Dashboard = () => {
           <p className="muted">Select a lesson to manage its shared files.</p>
         ) : (
           <>
+            {/* File Upload Section */}
+            <div className="form-group">
+              <label className="form-label">Upload File</label>
+              <input 
+                type="file" 
+                className="form-input" 
+                onChange={(e) => setNewResource({ ...newResource, file: e.target.files[0] })}
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png,.gif,.zip"
+              />
+              <div className="form-hint">Max 10 MB. Supported: documents, images, archives.</div>
+            </div>
+            
+            {newResource.file && (
+              <>
+                <div className="form-group">
+                  <label className="form-label">Label (optional)</label>
+                  <input 
+                    className="form-input" 
+                    value={newResource.label} 
+                    onChange={(e) => setNewResource({ ...newResource, label: e.target.value })} 
+                    placeholder="e.g., Chapter 3 Worksheet" 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Note (optional)</label>
+                  <input 
+                    className="form-input" 
+                    value={newResource.description} 
+                    onChange={(e) => setNewResource({ ...newResource, description: e.target.value })} 
+                    placeholder="Short context for the student" 
+                  />
+                </div>
+                <button 
+                  className="auth-button" 
+                  onClick={() => handleAction(async () => {
+                    await roleAPI.addLessonResourceWithFile(
+                      resourceLesson._id, 
+                      newResource.file, 
+                      newResource.label, 
+                      newResource.description
+                    );
+                    const data = await roleAPI.getLessonResources(resourceLesson._id);
+                    setLessonResources(data.resources || []);
+                    setNewResource({ label: '', url: '', description: '', file: null });
+                    showSuccess('File uploaded');
+                  })}
+                >
+                  Upload File
+                </button>
+              </>
+            )}
+
+            {/* Or Link Section */}
+            <div style={{ margin: '16px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+              — or add a link —
+            </div>
+            
             <div className="form-group">
               <label className="form-label">Link Label</label>
               <input className="form-input" value={newResource.label} onChange={(e) => setNewResource({ ...newResource, label: e.target.value })} placeholder="e.g., Chapter 3 Worksheet" />
@@ -2955,27 +3012,32 @@ const Dashboard = () => {
               await roleAPI.addLessonResource(resourceLesson._id, payload);
               const data = await roleAPI.getLessonResources(resourceLesson._id);
               setLessonResources(data.resources || []);
-              setNewResource({ label: '', url: '', description: '' });
+              setNewResource({ label: '', url: '', description: '', file: null });
               showSuccess('Link added');
             })}>Add Link</button>
 
             <div className="section" style={{ marginTop: 16 }}>
-              <h4 className="section-title"><FileText className="icon" /> Shared Links</h4>
+              <h4 className="section-title"><FileText className="icon" /> Shared Resources</h4>
               {lessonResources.length === 0 ? (
-                <p className="muted">No files yet. Add your first link above.</p>
+                <p className="muted">No files yet. Upload a file or add a link above.</p>
               ) : (
                 <div className="list" style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
                   {lessonResources.map((r) => (
                     <div key={r._id} className="list-item" style={{ width: '100%' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                        <a href={r.url} target="_blank" rel="noopener noreferrer" className="auth-button btn-sm" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', whiteSpace: 'normal', wordBreak: 'break-word', maxWidth: '100%' }}>
+                        <a href={r.type === 'file' ? `http://localhost:4000${r.url}` : r.url} target="_blank" rel="noopener noreferrer" className="auth-button btn-sm" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', whiteSpace: 'normal', wordBreak: 'break-word', maxWidth: '100%' }}>
                           <FileText className="icon" /> {r.label}
+                          {r.type === 'file' && (
+                            <span className="badge" style={{ marginLeft: 4, fontSize: '0.75rem' }}>
+                              {(r.fileSize / 1024).toFixed(1)} KB
+                            </span>
+                          )}
                         </a>
                         <button className="icon-button" title="Remove" onClick={() => handleAction(async () => {
                           await roleAPI.deleteLessonResource(resourceLesson._id, r._id);
                           const data = await roleAPI.getLessonResources(resourceLesson._id);
                           setLessonResources(data.resources || []);
-                          showSuccess('Link removed');
+                          showSuccess(r.type === 'file' ? 'File removed' : 'Link removed');
                         })}>
                           <Trash2 className="icon" />
                         </button>

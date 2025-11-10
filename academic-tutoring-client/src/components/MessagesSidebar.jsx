@@ -24,14 +24,14 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, UserCheck, X, ArrowLeft, Plus, Search } from 'lucide-react';
+import { GraduationCap, UserCheck, X, ArrowLeft, Plus, Search, Paperclip, File as FileIcon } from 'lucide-react';
 
 const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
   // Conversation state management
   const [conversations, setConversations] = useState([]); // List of user conversations
   const [selectedConversation, setSelectedConversation] = useState(null); // Currently selected conversation
   const [messages, setMessages] = useState([]); // Messages in selected conversation
-  const [messageForm, setMessageForm] = useState({ message: '' }); // Message input form
+  const [messageForm, setMessageForm] = useState({ message: '', file: null }); // Message input form
   const [loading, setLoading] = useState(false); // Loading state for operations
   
   // New conversation state
@@ -41,7 +41,8 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
   const [searchingTeachers, setSearchingTeachers] = useState(false); // Teacher search loading state
   const [newConversationForm, setNewConversationForm] = useState({ 
     teacherEmail: '', 
-    message: '' 
+    message: '',
+    file: null
   }); // New conversation form data
 
   useEffect(() => {
@@ -60,6 +61,9 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
       } else if (user.role === 'Student') {
         data = await roleAPI.getStudentConversations();
         setConversations(data.conversations || []);
+      } else if (user.role === 'Parent') {
+        data = await roleAPI.getParentConversations();
+        setConversations(data.conversations || []);
       }
     } catch (error) {
       console.error('Failed to load conversations:', error);
@@ -73,11 +77,20 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
       setSelectedConversation(conversation);
       let data;
       if (user.role === 'Teacher') {
-        data = await roleAPI.getTeacherConversation({ studentId: conversation.studentId });
+        const params = conversation.type === 'parent' 
+          ? { parentId: conversation.parentId } 
+          : { studentId: conversation.studentId };
+        data = await roleAPI.getTeacherConversation(params);
         setMessages(data.messages || []);
       } else if (user.role === 'Student') {
         data = await roleAPI.getStudentConversation({ 
-          teacherEmail: conversation.teacherEmail, 
+          teacherEmail: conversation.teacher?.email || conversation.teacherEmail, 
+          teacherId: conversation.teacherId 
+        });
+        setMessages(data.messages || []);
+      } else if (user.role === 'Parent') {
+        data = await roleAPI.getParentConversation({ 
+          teacherEmail: conversation.teacher?.email || conversation.teacherEmail, 
           teacherId: conversation.teacherId 
         });
         setMessages(data.messages || []);
@@ -88,23 +101,34 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
   };
 
   const sendMessage = async () => {
-    if (!messageForm.message.trim() || !selectedConversation) return;
+    // Allow sending if there's either a message or a file
+    if ((!messageForm.message.trim() && !messageForm.file) || !selectedConversation) return;
 
     try {
       if (user.role === 'Teacher') {
         await roleAPI.teacherReply({ 
-          studentId: selectedConversation.studentId, 
-          message: messageForm.message 
+          studentId: selectedConversation.studentId,
+          parentId: selectedConversation.parentId,
+          message: messageForm.message,
+          file: messageForm.file
         });
       } else if (user.role === 'Student') {
         await roleAPI.contactTeacher({ 
-          teacherEmail: selectedConversation.teacherEmail,
+          teacherEmail: selectedConversation.teacher?.email || selectedConversation.teacherEmail,
           teacherId: selectedConversation.teacherId,
-          message: messageForm.message 
+          message: messageForm.message,
+          file: messageForm.file
+        });
+      } else if (user.role === 'Parent') {
+        await roleAPI.parentContactTeacher({
+          teacherEmail: selectedConversation.teacher?.email || selectedConversation.teacherEmail,
+          teacherId: selectedConversation.teacherId,
+          message: messageForm.message,
+          file: messageForm.file
         });
       }
       
-      setMessageForm({ message: '' });
+      setMessageForm({ message: '', file: null });
       // Reload the conversation
       await loadConversation(selectedConversation);
       // Refresh conversations list
@@ -123,6 +147,9 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
 
   const getConversationTitle = (conversation) => {
     if (user.role === 'Teacher') {
+      if (conversation.type === 'parent') {
+        return `${conversation.parent?.firstName} ${conversation.parent?.lastName} (Parent)`;
+      }
       return `${conversation.student?.firstName} ${conversation.student?.lastName}`;
     } else {
       return `${conversation.teacher?.firstName} ${conversation.teacher?.lastName}`;
@@ -131,6 +158,9 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
 
   const getConversationSubtitle = (conversation) => {
     if (user.role === 'Teacher') {
+      if (conversation.type === 'parent') {
+        return conversation.parent?.email;
+      }
       return conversation.student?.email;
     } else {
       return conversation.teacher?.email;
@@ -158,13 +188,22 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
     if (!newConversationForm.teacherEmail || !newConversationForm.message.trim()) return;
 
     try {
-      await roleAPI.contactTeacher({
-        teacherEmail: newConversationForm.teacherEmail,
-        message: newConversationForm.message
-      });
+      if (user.role === 'Parent') {
+        await roleAPI.parentContactTeacher({
+          teacherEmail: newConversationForm.teacherEmail,
+          message: newConversationForm.message,
+          file: newConversationForm.file
+        });
+      } else {
+        await roleAPI.contactTeacher({
+          teacherEmail: newConversationForm.teacherEmail,
+          message: newConversationForm.message,
+          file: newConversationForm.file
+        });
+      }
       
       // Reset form and close new conversation view
-      setNewConversationForm({ teacherEmail: '', message: '' });
+      setNewConversationForm({ teacherEmail: '', message: '', file: null });
       setShowNewConversation(false);
       setTeacherSearchQuery('');
       setTeacherSearchResults([]);
@@ -196,7 +235,7 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
         <div className="sidebar-header">
           <h3>Messages</h3>
           <div className="header-actions">
-            {user.role === 'Student' && !selectedConversation && !showNewConversation && (
+            {(user.role === 'Student' || user.role === 'Parent') && !selectedConversation && !showNewConversation && (
               <button 
                 className="new-conversation-btn" 
                 onClick={() => setShowNewConversation(true)}
@@ -220,7 +259,7 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
               ) : conversations.length === 0 ? (
                 <div className="no-conversations">
                   <p>No conversations yet</p>
-                  {user.role === 'Student' && (
+                  {(user.role === 'Student' || user.role === 'Parent') && (
                     <button 
                       className="start-conversation-btn"
                       onClick={() => setShowNewConversation(true)}
@@ -326,6 +365,22 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
                   />
                 </div>
                 
+                <div className="form-group">
+                  <label>Attach File (optional)</label>
+                  <input
+                    type="file"
+                    onChange={(e) => setNewConversationForm({ ...newConversationForm, file: e.target.files[0] })}
+                    className="form-input"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png,.gif,.zip"
+                  />
+                  {newConversationForm.file && (
+                    <div className="file-preview" style={{ marginTop: 8 }}>
+                      <FileIcon size={16} />
+                      <span>{newConversationForm.file.name}</span>
+                    </div>
+                  )}
+                </div>
+                
                 <button
                   className="start-conversation-btn"
                   onClick={startNewConversation}
@@ -354,11 +409,26 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
                 ) : (
                   messages.map((message) => {
                     const isMe = (user.role === 'Teacher' && message.fromTeacherId) || 
-                                (user.role === 'Student' && message.fromStudentId);
+                                (user.role === 'Student' && message.fromStudentId) ||
+                                (user.role === 'Parent' && message.fromParentId);
                     return (
                       <div key={message._id} className={`message ${isMe ? 'sent' : 'received'}`}>
                         <div className="message-content">
                           {message.message}
+                          {message.attachment && (
+                            <div className="message-attachment">
+                              <a 
+                                href={`http://localhost:4000${message.attachment.url}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="attachment-link"
+                              >
+                                <FileIcon size={16} />
+                                <span>{message.attachment.originalName}</span>
+                                <span className="file-size">({(message.attachment.fileSize / 1024).toFixed(1)} KB)</span>
+                              </a>
+                            </div>
+                          )}
                         </div>
                         <div className="message-time">
                           {new Date(message.createdAt).toLocaleString()}
@@ -370,17 +440,41 @@ const MessagesSidebar = ({ isOpen, onClose, user, roleAPI }) => {
               </div>
 
               <div className="message-inputs">
-                <input
-                  type="text"
-                  placeholder="Type a message..."
-                  value={messageForm.message}
-                  onChange={(e) => setMessageForm({ ...messageForm, message: e.target.value })}
-                  onKeyPress={handleKeyPress}
-                  className="message-field"
-                />
-                <button onClick={sendMessage} className="send-btn" disabled={!messageForm.message.trim()}>
-                  Send
-                </button>
+                {messageForm.file && (
+                  <div className="file-preview">
+                    <FileIcon size={16} />
+                    <span>{messageForm.file.name}</span>
+                    <button 
+                      className="remove-file-btn"
+                      onClick={() => setMessageForm({ ...messageForm, file: null })}
+                      title="Remove file"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+                <div className="input-row">
+                  <label className="attach-btn" title="Attach file">
+                    <Paperclip size={18} />
+                    <input
+                      type="file"
+                      style={{ display: 'none' }}
+                      onChange={(e) => setMessageForm({ ...messageForm, file: e.target.files[0] })}
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png,.gif,.zip"
+                    />
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Type a message..."
+                    value={messageForm.message}
+                    onChange={(e) => setMessageForm({ ...messageForm, message: e.target.value })}
+                    onKeyPress={handleKeyPress}
+                    className="message-field"
+                  />
+                  <button onClick={sendMessage} className="send-btn" disabled={!messageForm.message.trim() && !messageForm.file}>
+                    Send
+                  </button>
+                </div>
               </div>
             </div>
           )}

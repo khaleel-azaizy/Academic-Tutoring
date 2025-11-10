@@ -180,6 +180,24 @@ export const roleAPI = {
       throw error.response?.data || error.message;
     }
   },
+  // Add lesson resource with file upload
+  addLessonResourceWithFile: async (lessonId, file, label, description) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (label) formData.append('label', label);
+      if (description) formData.append('description', description);
+      
+      const res = await api.post(`/teacher/lessons/${lessonId}/resources`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
   deleteLessonResource: async (lessonId, resourceId) => {
     try {
       const res = await api.delete(`/teacher/lessons/${lessonId}/resources/${resourceId}`);
@@ -260,10 +278,25 @@ export const roleAPI = {
       throw error.response?.data || error.message;
     }
   },
-  teacherReply: async ({ studentId, message }) => {
+  teacherReply: async ({ studentId, parentId, message, file }) => {
     try {
-      const res = await api.post('/teacher/reply', { studentId, message });
-      return res.data;
+      if (file) {
+        const formData = new FormData();
+        if (studentId) formData.append('studentId', studentId);
+        if (parentId) formData.append('parentId', parentId);
+        formData.append('message', message);
+        formData.append('file', file);
+        
+        const res = await api.post('/teacher/reply', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        return res.data;
+      } else {
+        const res = await api.post('/teacher/reply', { studentId, parentId, message });
+        return res.data;
+      }
     } catch (error) {
       throw error.response?.data || error.message;
     }
@@ -402,8 +435,24 @@ export const roleAPI = {
   },
   contactTeacher: async (payload) => {
     try {
-      const res = await api.post('/student/contact-teacher', payload);
-      return res.data;
+      // Check if file attachment is present
+      if (payload.file) {
+        const formData = new FormData();
+        formData.append('teacherEmail', payload.teacherEmail);
+        if (payload.teacherId) formData.append('teacherId', payload.teacherId);
+        formData.append('message', payload.message);
+        formData.append('file', payload.file);
+        
+        const res = await api.post('/student/contact-teacher', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        return res.data;
+      } else {
+        const res = await api.post('/student/contact-teacher', payload);
+        return res.data;
+      }
     } catch (error) {
       throw error.response?.data || error.message;
     }
@@ -435,6 +484,48 @@ export const roleAPI = {
   deleteAccount: async () => {
     try {
       const res = await api.delete('/profile');
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Parent messaging functions
+  parentContactTeacher: async (payload) => {
+    try {
+      // Check if file attachment is present
+      if (payload.file) {
+        const formData = new FormData();
+        formData.append('teacherEmail', payload.teacherEmail);
+        if (payload.teacherId) formData.append('teacherId', payload.teacherId);
+        formData.append('message', payload.message);
+        formData.append('file', payload.file);
+        
+        const res = await api.post('/parent/contact-teacher', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        return res.data;
+      } else {
+        const res = await api.post('/parent/contact-teacher', payload);
+        return res.data;
+      }
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  getParentConversation: async ({ teacherEmail, teacherId }) => {
+    try {
+      const res = await api.get('/parent/messages', { params: { teacherEmail, teacherId } });
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+  getParentConversations: async () => {
+    try {
+      const res = await api.get('/parent/conversations');
       return res.data;
     } catch (error) {
       throw error.response?.data || error.message;
